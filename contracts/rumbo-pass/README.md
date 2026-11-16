@@ -108,7 +108,7 @@ La corrida se puede repetir: las cuentas y el activo se reusan y cada vez se des
 
 | Qué | Dónde |
 |---|---|
-| WASM (hash) | `f0c0cd2d3461374b1395aad069a357e4f5fade55b9bcd3d913699abf2a3266e3` |
+| WASM (hash) | `c942ce0e118545a9bbd5aa25ca8a9c7482715124cc7c7a28470dfaf66dd4fa65` |
 | Evento pago | [`CDKKJV3QFG4RBYLRIRTWMXFBAQVY5NP3THXBNDT7PX7ICWSCN3GCZ5UH`](https://stellar.expert/explorer/testnet/contract/CDKKJV3QFG4RBYLRIRTWMXFBAQVY5NP3THXBNDT7PX7ICWSCN3GCZ5UH) |
 | Evento gratis | [`CDKAPFK7NM4MCITFNAOTOBRTCFALZVL3MU7V7N3PTY7LURHSMNTMU2E5`](https://stellar.expert/explorer/testnet/contract/CDKAPFK7NM4MCITFNAOTOBRTCFALZVL3MU7V7N3PTY7LURHSMNTMU2E5) |
 | USDC de prueba (emisor) | `GCJU3JEKQOU5A3S7ILVXXVBKZBIOPBXW4ZO2LDSGYCZT3WDRTPEOKYOL` |
