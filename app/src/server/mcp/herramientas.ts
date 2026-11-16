@@ -11,6 +11,7 @@ import { isPublicKind } from "../../lib/credential-kinds.ts";
 import { formatStationCode } from "../../lib/station-code.ts";
 import { chapterSummary } from "../embajadores.ts";
 import { baseUrl } from "../env.ts";
+import { isListOnly } from "../evento/por-lista.ts";
 import { RESEND_BATCH_SIZE, resendCredentialLinks } from "../evento/recordatorio.ts";
 import { explorerUrl, reportNetwork } from "../explorador.ts";
 import { buildEventReportData } from "../informe.ts";
@@ -118,7 +119,8 @@ function linkBase(ctx: McpContext): string {
 
 function eventSummary(event: EventRecord) {
   const { slug, name, description, startsAt, endsAt, timezone, place, venue, organizerName, capacity, published, teamSignup, template } = event;
-  return { slug, name, description, startsAt, endsAt, timezone, place, venue, organizerName, capacity, published, teamSignup, template };
+  // Un evento que entra solo por lista lo dice (registration: "list_only"); en los demás el campo no viene.
+  return { slug, name, description, startsAt, endsAt, timezone, place, venue, organizerName, capacity, published, teamSignup, template, ...(isListOnly(event) ? { registration: "list_only" as const } : {}) };
 }
 
 /** Los enlaces de quien organiza, con su clave: el panel y lo que toca según el momento del evento. */
@@ -320,7 +322,9 @@ export async function publishDraft(ctx: McpContext, args: EventArgs) {
     contracts: await contractsOf(ctx, published),
     event: eventSummary(published),
     links: adminLinks(ctx, published, key),
-    next: "The event is live: attendees register at links.page. Next steps: import_guest_list for the people already registered elsewhere, event_status for the live numbers, the station codes for the volunteers are in event_status.stations.",
+    next: isListOnly(published)
+      ? "The event is live, and on this server it is list-only: nobody can register from links.page, which says the organizer handles registration. Credentials come from import_guest_list (the approved list) and from adding people at the door. Next steps: import_guest_list, event_status for the live numbers, the station codes for the volunteers are in event_status.stations."
+      : "The event is live: attendees register at links.page. Next steps: import_guest_list for the people already registered elsewhere, event_status for the live numbers, the station codes for the volunteers are in event_status.stations.",
   };
 }
 
@@ -345,7 +349,7 @@ export async function getEvent(ctx: McpContext, args: EventArgs & { lang?: Lang 
         kind: t.credentialKind,
         priceUsdc: t.priceUsdc,
         free: t.priceUsdc === 0,
-        publicRegistration: isPublicKind(t.credentialKind),
+        publicRegistration: isPublicKind(t.credentialKind) && !isListOnly(event),
         ...(organizer ? { contractId: t.contractId ?? event.contractId } : {}),
         benefits: (await ctx.repo.listTicketTypeBenefits(t.id)).map((b) => ({ id: b.id, name: b.name, kind: b.kind })),
       })),
