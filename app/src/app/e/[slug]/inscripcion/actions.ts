@@ -6,6 +6,9 @@
 // formulario llama a las otras tres desde el navegador, en orden: walletChallengeAction da el desafío que la
 // cuenta firma (SEP-53), walletRegisterAction inscribe con esa prueba y devuelve lo que hay que autorizar, y
 // walletSignAction manda la autorización firmada y lleva a la confirmación.
+//
+// Las tres que inscriben pasan por las puertas públicas (publicRegistration y publicCompletion): en un evento que
+// entra solo por lista contestan que la inscripción la lleva quien organiza, y no inscriben a nadie.
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { makeT, type T } from "@/i18n/index.ts";
@@ -16,9 +19,9 @@ import { withoutEmails } from "@/server/log.ts";
 import { getRepo } from "@/server/repo.ts";
 import {
   RegistrationNotFound,
-  completeRegistration,
   hasErrors,
-  registerForEvent,
+  publicCompletion,
+  publicRegistration,
   validateFields,
   type FailureReason,
   type FieldError,
@@ -63,6 +66,7 @@ const FAILURE_KEYS: Record<FailureReason, string> = {
   signature_invalid: "evento.error.autorizacion",
   signature_expired: "evento.error.autorizacionVencida",
   ticket_mismatch: "evento.error.entradaPropia",
+  list_only: "evento.porLista",
 };
 
 /** De dónde llegó el pedido, para que el enlace del correo abra en el mismo servidor en desarrollo. */
@@ -116,7 +120,7 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
 
   let result: RegistrationResult;
   try {
-    result = await registerForEvent({
+    result = await publicRegistration({
       slug,
       ticketTypeId,
       ...fields,
@@ -172,7 +176,7 @@ export async function walletRegisterAction(input: WalletRegistrationInput): Prom
   }
   let result: RegistrationResult;
   try {
-    result = await registerForEvent({
+    result = await publicRegistration({
       slug: String(input.slug),
       ticketTypeId: String(input.ticketTypeId),
       ...fields,
@@ -199,7 +203,7 @@ export async function walletSignAction(input: { slug: string; requestId: string;
   const t = makeT(lang);
   let result: RegistrationResult;
   try {
-    result = await completeRegistration({ requestId: String(input.requestId), signedAuthEntry: String(input.signedAuthEntry), slug: String(input.slug), lang, origin: await requestOrigin() });
+    result = await publicCompletion({ requestId: String(input.requestId), signedAuthEntry: String(input.signedAuthEntry), slug: String(input.slug), lang, origin: await requestOrigin() });
   } catch (error) {
     console.error("[inscripcion] firma", error);
     return { error: t("evento.error.red") };

@@ -30,6 +30,7 @@ const FAILURE_KEYS: Record<TeamFailure, string> = {
   members_missing: "kit.equipo.errorIntegrantesFaltan",
   other_team: "kit.equipo.errorOtro",
   no_ticket: "kit.equipo.errorGeneral",
+  list_only: "evento.porLista",
 };
 
 /** De dónde llegó el pedido, para que el enlace del correo abra en el mismo servidor en desarrollo. */

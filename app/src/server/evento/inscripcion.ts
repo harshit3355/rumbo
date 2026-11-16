@@ -22,6 +22,7 @@ import { ensureTicketTypeContract } from "../kit/publicar.ts";
 import { NETWORK_PASSPHRASE, getTestAsset, isContractError, rumboPass, walletChain } from "../stellar.ts";
 import { getOrCreateAccessKey } from "./acceso.ts";
 import { buildPassEmail } from "./correo.ts";
+import { listOnlyEventAt } from "./por-lista.ts";
 
 export interface RegistrationFields {
   name: string;
@@ -102,7 +103,9 @@ export type FailureReason =
   /** El pedido de firma venció o ya se usó: hay que empezar de nuevo. */
   | "signature_expired"
   /** La credencial que ya le reservó una importación es de una entrada paga, y eligió la gratis: tiene que elegir la suya. */
-  | "ticket_mismatch";
+  | "ticket_mismatch"
+  /** El evento entra solo por lista (por-lista.ts): la inscripción la lleva quien organiza y acá nadie se inscribe por su cuenta. */
+  | "list_only";
 
 /** Lo que el navegador tiene que firmar con la cuenta propia (client.signAuthEntry), y con qué id devolverlo. */
 export interface SignatureRequest {
@@ -482,4 +485,31 @@ export async function completeRegistration(input: CompletionInput): Promise<Regi
     if (typeof number !== "number") return number;
     return finishRegistration(repo, { ...common, txHash: null, chainNumber: number });
   }
+}
+
+// ---------- Las puertas públicas ----------
+
+const listOnly = (slug: string): Extract<RegistrationResult, { kind: "failed" }> => failed("list_only", `el evento ${slug} entra solo por lista`);
+
+/**
+ * La inscripción que pide la persona por su cuenta: el formulario, el formulario con la cuenta propia y la API. Es
+ * registerForEvent con un freno antes: en un evento que entra solo por lista contesta "list_only" sin tocar nada (ni
+ * la persona, ni el cupo, ni el freno de pedidos). Lo que pide quien organiza (agregar en la puerta, importar la
+ * lista) no pasa por acá.
+ */
+export async function publicRegistration(input: RegistrationInput): Promise<RegistrationResult> {
+  const closed = await listOnlyEventAt(getRepo(), input.slug);
+  if (closed) return listOnly(closed.slug);
+  return registerForEvent(input);
+}
+
+/**
+ * El paso 2 de la inscripción con la cuenta propia, pedido por la persona: completeRegistration con el mismo freno.
+ * Un pedido de firma que quedó de antes de que el evento pasara a entrar solo por lista ya no emite la credencial.
+ * El evento de la ruta va siempre: completeRegistration no acepta un pedido de firma de otro evento.
+ */
+export async function publicCompletion(input: CompletionInput & { slug: string }): Promise<RegistrationResult> {
+  const closed = await listOnlyEventAt(getRepo(), input.slug);
+  if (closed) return listOnly(closed.slug);
+  return completeRegistration(input);
 }

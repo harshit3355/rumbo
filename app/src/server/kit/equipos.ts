@@ -5,9 +5,13 @@
 // Un equipo que ya existe se puede volver a mandar (un reintento porque la red falló para alguien, o para sumar
 // gente), pero el pedido tiene que traer a todos los que ya están: quien conozca el correo de un solo integrante
 // no mete gente en un equipo ajeno, y el equipo nunca pasa del tope contando a quienes ya están.
+//
+// Es una puerta pública: la abre cualquiera desde la página del evento. En un evento que entra solo por lista
+// (por-lista.ts) contesta "list_only" antes de anotar el equipo o inscribir a nadie.
 import type { Lang } from "../../i18n/index.ts";
 import { isPublicKind } from "../../lib/credential-kinds.ts";
 import { registerForEvent, validateFields, type FailureReason } from "../evento/inscripcion.ts";
+import { listOnlyEventAt } from "../evento/por-lista.ts";
 import { emailKey, getRepo, normalizeEmail, type Repo, type Team } from "../repo.ts";
 
 export interface TeamMemberInput {
@@ -42,7 +46,9 @@ export type TeamFailure =
   /** El equipo ya tiene integrantes y el pedido no los trae a todos. */
   | "members_missing"
   | "other_team"
-  | "no_ticket";
+  | "no_ticket"
+  /** El evento entra solo por lista: la inscripción la lleva quien organiza. */
+  | "list_only";
 
 export type TeamResult =
   | { ok: false; reason: TeamFailure; /** La fila (desde 0) con el problema, si es de una persona. */ row?: number }
@@ -59,6 +65,8 @@ export type TeamResult =
 const clean = (text: string): string => text.replace(/\p{Cf}/gu, "").replace(/\s+/g, " ").trim();
 
 export async function registerTeam(input: TeamInput, repo: Repo = getRepo()): Promise<TeamResult> {
+  // Antes que nada, y también por una dirección vieja del evento: acá los equipos no se inscriben por su cuenta.
+  if (await listOnlyEventAt(repo, input.slug)) return { ok: false, reason: "list_only" };
   const event = await repo.getEventBySlug(input.slug);
   if (!event || !event.published) return { ok: false, reason: "not_found" };
   if (!event.teamSignup) return { ok: false, reason: "no_teams" };

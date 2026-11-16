@@ -10,11 +10,13 @@
 //   { status: "needs_trustline", passId, asset }: la entrada paga necesita que la cuenta acepte el USDC de prueba
 //     (client.setTrustline); después se vuelve a empezar, con otro desafío.
 // Con Pollar prendido (RUMBO_ACCOUNTS=pollar), sin wallet contesta 401 { error: "wallet_required" }.
+// En un evento que entra solo por lista (RUMBO_LIST_ONLY_EVENTS) contesta 403 { error: "list_only" }: la inscripción
+// la lleva quien organiza, que importa su lista.
 import { NextResponse, type NextRequest } from "next/server";
 import { DEFAULT_LANG, isLang } from "@/i18n/index.ts";
 import { readWalletProof } from "@/server/cuenta-propia.ts";
 import { clientKey } from "@/server/limites.ts";
-import { RegistrationNotFound, hasErrors, registerForEvent, validateFields, type RegistrationResult } from "@/server/evento/inscripcion.ts";
+import { RegistrationNotFound, hasErrors, publicRegistration, validateFields, type RegistrationResult } from "@/server/evento/inscripcion.ts";
 import { registrationResponse } from "@/server/evento/inscripcion-respuesta.ts";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +47,7 @@ export async function POST(request: NextRequest, { params }: { params: Params })
 
   let result: RegistrationResult;
   try {
-    result = await registerForEvent({
+    result = await publicRegistration({
       slug,
       ticketTypeId,
       ...fields,

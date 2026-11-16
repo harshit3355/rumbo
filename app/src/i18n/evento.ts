@@ -18,6 +18,7 @@ export const evento = {
     "evento.entrada.pronto": "pronto",
     "evento.entrada.agotada": "Agotada",
     "evento.sinEntradas": "Las inscripciones todavía no están abiertas.",
+    "evento.porLista": "La inscripción a este evento la lleva quien organiza.",
 
     // El formulario
     "evento.form.tituloGratis": "Inscribirme",
@@ -156,6 +157,7 @@ export const evento = {
     "evento.entrada.pronto": "soon",
     "evento.entrada.agotada": "Sold out",
     "evento.sinEntradas": "Registration is not open yet.",
+    "evento.porLista": "Registration for this event is handled by the organizer.",
 
     "evento.form.tituloGratis": "Register",
     "evento.form.tituloPago": "Buy the ticket",

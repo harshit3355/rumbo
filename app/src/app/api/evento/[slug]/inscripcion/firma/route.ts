@@ -2,10 +2,11 @@
 // Cuerpo: { requestId, signedAuthEntry, lang? }: el id que devolvió la inscripción y la autorización que firmó el
 // dispositivo (client.signAuthEntry). El servidor revisa que sea la misma que dio a firmar, de esa cuenta y con
 // una firma que valga, y la manda pagando la comisión. Contesta como la inscripción: 201 con la credencial creada,
-// o el error (410 signature_expired si el pedido venció o ya se usó: hay que empezar de nuevo).
+// o el error (410 signature_expired si el pedido venció o ya se usó: hay que empezar de nuevo; 403 list_only si el
+// evento entra solo por lista).
 import { NextResponse, type NextRequest } from "next/server";
 import { DEFAULT_LANG, isLang } from "@/i18n/index.ts";
-import { completeRegistration, type RegistrationResult } from "@/server/evento/inscripcion.ts";
+import { publicCompletion, type RegistrationResult } from "@/server/evento/inscripcion.ts";
 import { registrationResponse } from "@/server/evento/inscripcion-respuesta.ts";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest, { params }: { params: Params })
 
   let result: RegistrationResult;
   try {
-    result = await completeRegistration({ requestId, signedAuthEntry, slug, lang: isLang(body.lang) ? body.lang : DEFAULT_LANG, origin: request.nextUrl.origin });
+    result = await publicCompletion({ requestId, signedAuthEntry, slug, lang: isLang(body.lang) ? body.lang : DEFAULT_LANG, origin: request.nextUrl.origin });
   } catch (error) {
     console.error("[inscripcion] firma", error);
     return NextResponse.json({ error: "network" }, { status: 502 });
