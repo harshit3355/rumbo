@@ -121,6 +121,11 @@ export function PanelCliente({
         setCadena((actual) => ({ ...actual, busy: false }));
         return;
       }
+      if (res.status === 409) {
+        // Otra persona, u otra pestaña, ya la está corriendo: no se lanza una segunda.
+        setCadena((actual) => ({ ...actual, busy: false, error: t("panel.cadena.enCurso") }));
+        return;
+      }
       if (!res.ok) throw new Error(String(res.status));
       const data = (await res.json()) as { sync: ChainSyncSummary; state: PanelState };
       setState(data.state);

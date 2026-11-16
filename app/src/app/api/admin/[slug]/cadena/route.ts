@@ -1,7 +1,9 @@
 // POST /api/admin/<evento>/cadena: contrasta el espejo con la cadena (status, attendees e info del
-// contrato), trae lo que falte y devuelve el resumen junto con el estado nuevo del panel.
+// contrato), trae lo que falte y devuelve el resumen junto con el estado nuevo del panel. Una sola verificación de
+// cada evento a la vez: si ya hay una corriendo, contesta 409 "busy" sin leer nada.
 import { NextResponse, type NextRequest } from "next/server";
-import { getPanelState, refreshFromChain } from "@/server/panel.ts";
+import { BUSY } from "@/server/compartido.ts";
+import { getPanelState, refreshFromChainInTurn } from "@/server/panel.ts";
 import { describeForLog } from "@/server/log.ts";
 import { authorizePanelRequest } from "@/server/panel-sesion.ts";
 
@@ -16,7 +18,8 @@ export async function POST(request: NextRequest, { params }: Context) {
   const auth = await authorizePanelRequest(request, slug);
   if (auth.response) return auth.response;
   try {
-    const sync = await refreshFromChain(auth.event);
+    const sync = await refreshFromChainInTurn(auth.event);
+    if (sync === BUSY) return NextResponse.json({ error: "busy" }, { status: 409, headers: { "Cache-Control": "no-store" } });
     const state = await getPanelState(auth.event);
     return NextResponse.json({ sync, state }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

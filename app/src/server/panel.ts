@@ -11,6 +11,7 @@ import { localLogoOrNull } from "../lib/logo.ts";
 import { base32Encode, bytesToBase64url } from "../lib/qr-codec.ts";
 import { STATION_CODE_LENGTH, isValidStationCode, normalizeStationCode } from "../lib/station-code.ts";
 import { getDb, jsonParam, readJson, type Db } from "./base/index.ts";
+import { BUSY, tryExclusive } from "./compartido.ts";
 import { describeForLog } from "./log.ts";
 import { getEventPublicKey } from "./qr-keys.ts";
 import {
@@ -631,6 +632,16 @@ async function saveChainSync(eventId: string, summary: ChainSyncSummary): Promis
 export async function getLastChainSync(eventId: string): Promise<ChainSyncSummary | null> {
   const row = await getDb().one("SELECT summary FROM chain_syncs WHERE event_id = ? ORDER BY synced_at DESC LIMIT 1", [eventId]);
   return row ? readJson<ChainSyncSummary>(row.summary) : null;
+}
+
+/**
+ * refreshFromChain con el turno del evento: una sola verificación de cada evento a la vez, aunque la pidan dos
+ * personas que coorganizan, dos pestañas o dos instancias del servidor. Cada una lee la cadena credencial por
+ * credencial durante minutos, y varias juntas le compiten al escáner por el nodo y por la base. Con el turno
+ * tomado devuelve BUSY sin leer nada: la que está corriendo termina y deja su resultado en el panel.
+ */
+export function refreshFromChainInTurn(event: EventRecord, repo: Repo = getRepo()): Promise<ChainSyncSummary | typeof BUSY> {
+  return tryExclusive(`chain:${event.id}`, () => refreshFromChain(event, repo));
 }
 
 /**
