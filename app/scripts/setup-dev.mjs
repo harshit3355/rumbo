@@ -31,6 +31,13 @@ if ((process.env.STELLAR_NETWORK || "testnet") !== "testnet") {
   process.exit(1);
 }
 
+// El guion no usa la base. Lo que manda a la red pasa por el turno de la cuenta que paga, y con RUMBO_REPO=postgres
+// ese turno se toma en la base de DATABASE_URL: si .env.local apunta a la base de un servidor en marcha, el guion le
+// sacaría el turno mientras despliega. Acá el motor queda en sqlite antes de cargar nada de src/server: el turno es
+// de este proceso y no se abre ninguna base. .env.local no cambia.
+const repoInEnv = process.env.RUMBO_REPO;
+process.env.RUMBO_REPO = "sqlite";
+
 const { Asset, BASE_FEE, Keypair, Networks, Operation, StrKey, TransactionBuilder, rpc, xdr } = await import("@stellar/stellar-sdk");
 const stellar = await import("../src/server/stellar.ts");
 
@@ -302,7 +309,7 @@ async function ownDeployment({ keypairs, code, sacId }) {
 
 async function main() {
   // Si el evento de muestra ya se sembró, sus entradas apuntan a los contratos de antes.
-  const seeded = process.env.RUMBO_REPO === "postgres" || existsSync(resolve(APP_DIR, process.env.RUMBO_DATA_DIR || "./data", "rumbo.db"));
+  const seeded = repoInEnv === "postgres" || existsSync(resolve(APP_DIR, process.env.RUMBO_DATA_DIR || "./data", "rumbo.db"));
 
   // Antes de generar una llave o de tocar la red: un despliegue propio no se arma con llaves del de muestra.
   if (mode.problem) throw new SetupError(mode.problem);
@@ -400,12 +407,6 @@ Después: pnpm seed (el evento de muestra) y pnpm dev.
 `);
   if (ownResult?.deployed.length && seeded) {
     console.log("Los contratos de muestra son nuevos. Si ya tenías sembrado el evento de muestra: pnpm seed -- --refresh, para que sus entradas apunten a estos.\n");
-  }
-
-  if (own) {
-    // Con Postgres el pool deja las conexiones abiertas un rato: se cierra, así el script termina enseguida.
-    const { closeDb } = await import("../src/server/base/index.ts");
-    await closeDb().catch(() => undefined);
   }
 }
 

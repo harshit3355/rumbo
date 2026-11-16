@@ -117,6 +117,33 @@ test("un contrato se da por perdido solo si la red dice que no está o que no es
   assert.doesNotMatch(guion, /if \(stellar\.isContractError\(error\)\) return null;/);
 });
 
+test("el guion no toma el turno de la cuenta que paga en ninguna base: fija sqlite antes de cargar el servidor", async () => {
+  const guion = readFileSync(join(APP_DIR, "scripts", "setup-dev.mjs"), "utf8");
+  const fija = guion.indexOf('process.env.RUMBO_REPO = "sqlite";');
+  assert.ok(fija > 0, "el guion no fija el motor de la base");
+  assert.ok(fija > guion.indexOf("loadEnv();"), "se fija después de leer .env.local, que si no lo pisaría");
+  const cargas = [...guion.matchAll(/import\("\.\.\/src\/server\/[^"]+"\)/g)];
+  assert.ok(cargas.length >= 2, "el guion ya no carga el servidor como se esperaba");
+  assert.ok(cargas.every((carga) => carga.index > fija), "algo de src/server se carga antes de fijar el motor");
+  assert.doesNotMatch(guion, /^import .* from "\.\.\/src\/server\//m, "un import de arriba se carga antes que todo");
+  assert.doesNotMatch(guion, /base\/index\.ts|closeDb|getDb\(/, "el guion no abre ni cierra ninguna base");
+
+  // Y con sqlite, el turno de la cuenta que paga no toca la base: es la fila de este proceso.
+  const anterior = { repo: process.env.RUMBO_REPO, url: process.env.DATABASE_URL };
+  process.env.RUMBO_REPO = "sqlite";
+  process.env.DATABASE_URL = "postgres://nadie:nada@127.0.0.1:9/no-existe";
+  try {
+    const { serialized, tryExclusive } = await import("../src/server/compartido.ts");
+    assert.equal(await serialized("sponsor", async () => "sin base"), "sin base");
+    assert.equal(await tryExclusive("sponsor", async () => "sin base"), "sin base");
+  } finally {
+    for (const [name, value] of [["RUMBO_REPO", anterior.repo], ["DATABASE_URL", anterior.url]]) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
 test("el guion decide con esa función y corta antes de generar una llave o de tocar la red", () => {
   const guion = readFileSync(join(APP_DIR, "scripts", "setup-dev.mjs"), "utf8");
   assert.match(guion, /const mode = deployMode\(\{/);
