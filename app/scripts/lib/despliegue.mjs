@@ -1,7 +1,8 @@
 // Lo que pnpm setup:dev decide antes de tocar la red, sin red ni archivos: qué despliegue le sirve a esta máquina
-// (el de muestra o uno propio). Va aparte del guion para poder probarlo (tests/setup-dev-modo.test.mjs): de esta
-// decisión depende que la máquina que tiene las llaves del despliegue de muestra no arme nunca un despliegue propio
-// pagando con esa cuenta.
+// (el de muestra o uno propio) y qué quiere decir un error al leer un contrato. Va aparte del guion para poder
+// probarlo (tests/setup-dev-modo.test.mjs): de estas decisiones depende que la máquina que tiene las llaves del
+// despliegue de muestra no arme nunca un despliegue propio pagando con esa cuenta, y que un tropiezo del nodo no
+// termine en contratos desplegados de más.
 
 /** Las cinco llaves de .env.local, con el nombre con el que se guardan sus claves públicas en un despliegue. */
 export const KEY_NAMES = {
@@ -61,4 +62,14 @@ export function deployMode({ sample, keys, configured, localPath, platform = pro
     sampleServes,
     problem: `.env.local mezcla llaves del despliegue de muestra (${shared.join(", ")}) con otras que no lo son o que faltan, y con esa mezcla no se arma un despliegue propio. Si esta máquina es la del despliegue de muestra, restaurá su .env.local entero. Si no, borrá de .env.local las cinco líneas STELLAR_*_SECRET y corré de nuevo: se generan las cinco propias.`,
   };
+}
+
+/**
+ * Si el error de leer un contrato dice que ese contrato no está en la red, o que no es un rumbo-pass (no tiene la
+ * función que se le pidió). Cualquier otro error de simulación (el nodo que contesta mal un momento) no dice nada
+ * del contrato: con uno de esos no se da el contrato por perdido ni se despliega otro en su lugar.
+ */
+export function saysNotOurContract(error) {
+  const text = `${error?.message ?? ""} ${error?.detail ?? ""}`;
+  return /Error\(Storage, MissingValue\)|non-existing value for contract instance|Error\(WasmVm, MissingValue\)|non-existent contract function|symbol not found in slice of strs/i.test(text);
 }

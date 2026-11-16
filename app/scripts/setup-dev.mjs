@@ -19,7 +19,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { KEY_NAMES, deployMode } from "./lib/despliegue.mjs";
+import { KEY_NAMES, deployMode, saysNotOurContract } from "./lib/despliegue.mjs";
 import { APP_DIR, ENV_PATH, loadEnv, readEnvFile, upsertEnv } from "./lib/env.mjs";
 
 process.chdir(APP_DIR);
@@ -31,7 +31,7 @@ if ((process.env.STELLAR_NETWORK || "testnet") !== "testnet") {
   process.exit(1);
 }
 
-const { Asset, BASE_FEE, Keypair, Networks, Operation, TransactionBuilder, rpc, xdr } = await import("@stellar/stellar-sdk");
+const { Asset, BASE_FEE, Keypair, Networks, Operation, StrKey, TransactionBuilder, rpc, xdr } = await import("@stellar/stellar-sdk");
 const stellar = await import("../src/server/stellar.ts");
 
 const STELLAR_CLI = process.env.STELLAR_CLI || "C:\\Users\\ASUS\\AppData\\Local\\Programs\\stellar-cli\\stellar.exe";
@@ -192,13 +192,18 @@ async function ownDeployment({ keypairs, code, sacId }) {
       : fallback;
   }
 
-  /** Lo que dice el contrato en la red, si sirve con estas llaves; null si no existe o no sirve. */
+  /**
+   * Lo que dice el contrato en la red, si sirve con estas llaves; null si no existe o no sirve. Un id mal formado en
+   * el archivo es un contrato que falta. Si la red no pudo contestar (cualquier otro error), no se decide nada: el
+   * guion termina y se corre de nuevo, en vez de desplegar otro contrato y dejar colgado al que sí servía.
+   */
   async function serving(contractId, spec) {
+    if (!StrKey.isValidContract(contractId)) return null;
     let info;
     try {
       info = await stellar.rumboPass.info(contractId);
     } catch (error) {
-      if (stellar.isContractError(error)) return null; // la red contestó: ese contrato no está, o no es un rumbo-pass
+      if (stellar.isContractError(error) && saysNotOurContract(error)) return null;
       throw error;
     }
     const fits =

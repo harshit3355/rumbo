@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { APP_DIR } from "./lib/entorno.mjs";
 
-const { KEY_NAMES, deployMode } = await import("../scripts/lib/despliegue.mjs");
+const { KEY_NAMES, deployMode, saysNotOurContract } = await import("../scripts/lib/despliegue.mjs");
 
 const MUESTRA = {
   asset: { code: "USDC", issuer: "G-MUESTRA-EMISOR" },
@@ -86,6 +86,35 @@ test("sin el despliegue de muestra a la vista no se arma nada, y la ruta se comp
   const enWindows = { localPath: "C:\\repo\\app\\data\\despliegue-local.json", configured: "c:\\Repo\\app\\data\\despliegue-local.json" };
   assert.equal(modo({ ...enWindows, platform: "win32" }).own, true);
   assert.equal(modo({ ...enWindows, platform: "linux" }).own, false);
+});
+
+test("un contrato se da por perdido solo si la red dice que no está o que no es un rumbo-pass", () => {
+  // Los dos primeros son lo que contestó la red de prueba al leer info() el 16-nov-2026: un id que no existe y el
+  // contrato del USDC de prueba. El tercero es el de un contrato de otro código que no tiene esa función.
+  const noExiste = { message: "El contrato rechazó la operación: HostError: Error(Storage, MissingValue)", detail: 'null | "trying to get non-existing value for contract instance"' };
+  const otroContrato = { message: "El contrato rechazó la operación: HostError: Error(Value, InvalidInput)", detail: 'null | ["symbol not found in slice of strs","info"]' };
+  const sinEsaFuncion = { message: "El contrato rechazó la operación: HostError: Error(WasmVm, MissingValue)", detail: '"trying to invoke non-existent contract function" | "info"' };
+  for (const error of [noExiste, otroContrato, sinEsaFuncion, { message: noExiste.message, detail: null }]) assert.equal(saysNotOurContract(error), true, error.message);
+
+  // Un tropiezo del nodo, un límite, un error del propio contrato o algo que no es un error de simulación: no dicen nada del contrato.
+  const noDicenNada = [
+    { message: "El contrato rechazó la operación: HostError: Error(Budget, ExceededLimit)", detail: null },
+    { message: "El contrato rechazó la operación: internal error", detail: null },
+    { message: "El contrato rechazó la operación: HostError: Error(Contract, #3) [NotInitialized]", detail: null },
+    { message: "El contrato rechazó la operación: HostError: Error(Value, InvalidInput)", detail: null },
+    new Error("fetch failed"),
+    new Error("Invalid contract ID: CNOESUNID"),
+    null,
+    undefined,
+    "no existe",
+  ];
+  for (const error of noDicenNada) assert.equal(saysNotOurContract(error), false, String(error?.message ?? error));
+
+  // El guion lo usa así: un id mal formado es un contrato que falta, y solo ese error lleva a desplegar otro.
+  const guion = readFileSync(join(APP_DIR, "scripts", "setup-dev.mjs"), "utf8");
+  assert.match(guion, /if \(!StrKey\.isValidContract\(contractId\)\) return null;/);
+  assert.match(guion, /if \(stellar\.isContractError\(error\) && saysNotOurContract\(error\)\) return null;\s+throw error;/);
+  assert.doesNotMatch(guion, /if \(stellar\.isContractError\(error\)\) return null;/);
 });
 
 test("el guion decide con esa función y corta antes de generar una llave o de tocar la red", () => {
