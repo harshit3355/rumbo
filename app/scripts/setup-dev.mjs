@@ -19,6 +19,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { KEY_NAMES, deployMode } from "./lib/despliegue.mjs";
 import { APP_DIR, ENV_PATH, loadEnv, readEnvFile, upsertEnv } from "./lib/env.mjs";
 
 process.chdir(APP_DIR);
@@ -64,16 +65,17 @@ function readJson(file) {
     return null;
   }
 }
-const samePath = (a, b) => (process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b);
 const publicOf = (name) => (process.env[name] ? Keypair.fromSecret(process.env[name]).publicKey() : null);
 
 const sample = readJson(SAMPLE_PATH);
-const configured = process.env.RUMBO_DEPLOY_JSON ? resolve(APP_DIR, process.env.RUMBO_DEPLOY_JSON) : null;
-// Lo que el despliegue de muestra le exige a quien lo usa: su puerta, que firma entradas y canjes, y su emisor,
-// que da el saldo de prueba. Las otras cuentas solo pagan o reciben.
-const sampleServes = Boolean(sample) && publicOf("STELLAR_GATE_SECRET") === sample.accounts?.gate && publicOf("STELLAR_ISSUER_SECRET") === sample.asset?.issuer;
-// Despliegue propio: si ya se usa el de data/, o si no hay otro elegido a mano y el de muestra no sirve con estas llaves.
-const own = configured ? samePath(configured, LOCAL_PATH) : Boolean(sample) && !sampleServes;
+// El de muestra, si sirve con estas llaves; si no, uno propio. Y con qué llaves no se arma uno propio (lib/despliegue.mjs).
+const mode = deployMode({
+  sample,
+  keys: Object.fromEntries(Object.entries(KEY_NAMES).map(([name, envName]) => [name, publicOf(envName)])),
+  configured: process.env.RUMBO_DEPLOY_JSON ? resolve(APP_DIR, process.env.RUMBO_DEPLOY_JSON) : null,
+  localPath: LOCAL_PATH,
+});
+const own = mode.own;
 
 // ---------- Escribir .env.local, y qué pasa si algo falla ----------
 
@@ -296,6 +298,9 @@ async function ownDeployment({ keypairs, code, sacId }) {
 async function main() {
   // Si el evento de muestra ya se sembró, sus entradas apuntan a los contratos de antes.
   const seeded = process.env.RUMBO_REPO === "postgres" || existsSync(resolve(APP_DIR, process.env.RUMBO_DATA_DIR || "./data", "rumbo.db"));
+
+  // Antes de generar una llave o de tocar la red: un despliegue propio no se arma con llaves del de muestra.
+  if (mode.problem) throw new SetupError(mode.problem);
 
   // 1. Las llaves que falten
   const generated = {};
