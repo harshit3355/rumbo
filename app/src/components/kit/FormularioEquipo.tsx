@@ -1,6 +1,7 @@
 "use client";
 // El formulario del equipo: su nombre y hasta cinco integrantes (nombre y correo), con una sola acción. Mientras
-// se prepara la credencial de cada persona (unos segundos cada una) el botón espera y lo dice.
+// se prepara la credencial de cada persona (unos segundos cada una) el botón espera y lo dice. El error que
+// vuelve del servidor se muestra junto al botón, que es lo que queda a la vista en un celular al mandar.
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import type { TeamFormState } from "@/app/e/[slug]/equipo/actions.ts";
@@ -53,10 +54,15 @@ function Cuerpo({ state, rows }: { state: TeamFormState; rows: number }) {
   );
 }
 
-function Espera() {
+/** La espera o el error, junto al botón: siempre a la vista, también en el celular. */
+function Estado({ error }: { error?: string }) {
   const { pending } = useFormStatus();
   const t = useT();
-  return <div aria-live="polite">{pending && <Aviso>{t("kit.equipo.esperando")}</Aviso>}</div>;
+  return (
+    <div aria-live="polite" className="cuenta-estado">
+      {pending ? <Aviso>{t("kit.equipo.esperando")}</Aviso> : error ? <Aviso tono="alerta">{error}</Aviso> : null}
+    </div>
+  );
 }
 
 function Enviar() {
@@ -100,11 +106,10 @@ export function FormularioEquipo({ action, slug, eventName, rows }: Props) {
       </header>
       <div className="pantalla-cuerpo">
         <input type="hidden" name="evento" value={slug} />
-        {state.error && <Aviso tono="alerta">{state.error}</Aviso>}
         <Cuerpo state={state} rows={rows} />
-        <Espera />
       </div>
       <div className="pantalla-accion">
+        <Estado error={state.error} />
         <Enviar />
         <p className="nota">{t("cuenta.modoPrueba")}</p>
       </div>

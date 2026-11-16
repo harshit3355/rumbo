@@ -645,6 +645,20 @@ test("el texto de la página existe en los dos idiomas y dice quién lleva la in
   assert.equal(textos.en["evento.porLista"], "Registration for this event is handled by the organizer.");
 });
 
+test("el aviso que vuelve del servidor se muestra junto al botón del formulario, que es lo que queda a la vista en un celular", () => {
+  // Quien manda un formulario que tenía abierto de antes recibe "la lleva quien organiza". Debajo de los campos, en
+  // un celular quedaba fuera de la pantalla, tapado por el botón fijo: va adentro de la zona del botón, antes que él.
+  for (const [archivo, boton] of [["evento/FormularioInscripcion.tsx", "<Enviar label="], ["kit/FormularioEquipo.tsx", "<Enviar />"]]) {
+    const fuente = readFileSync(join(APP_DIR, "src", "components", ...archivo.split("/")), "utf8");
+    const formulario = fuente.slice(fuente.lastIndexOf("<form action={formAction}"));
+    const accion = formulario.indexOf('<div className="pantalla-accion">');
+    const estado = formulario.indexOf("<Estado error={state.error} />");
+    assert.ok(accion > 0 && estado > accion && formulario.indexOf(boton) > estado, `${archivo}: el aviso no está junto al botón, antes que él`);
+    assert.equal(formulario.slice(0, accion).includes("state.error"), false, `${archivo}: queda un aviso de error entre los campos`);
+    assert.match(fuente, /<div aria-live="polite" className="cuenta-estado">\s+\{pending \? <Aviso>.*<\/Aviso> : error \? <Aviso tono="alerta">\{error\}<\/Aviso> : null\}/, archivo);
+  }
+});
+
 test("el panel de un evento que entra solo por lista lo dice arriba, en los dos idiomas, y no anuncia que recibe inscripciones", () => {
   assert.match(textosPanel.es["panel.porLista"], /^Este evento entra solo por lista: nadie se inscribe por su cuenta/);
   assert.match(textosPanel.en["panel.porLista"], /^This event is list-only: nobody can sign up on their own/);

@@ -1,6 +1,7 @@
 "use client";
 // El formulario de inscripción: nombre y correo, y una sola acción. Mientras la red confirma (unos
-// segundos) el botón espera y lo dice. Los errores vuelven de la acción del servidor, ya traducidos.
+// segundos) el botón espera y lo dice. Los errores vuelven de la acción del servidor, ya traducidos, y se muestran
+// junto al botón: en un celular, debajo de los campos quedaban fuera de la pantalla y no se veía que algo pasó.
 // Con Pollar prendido (llega su clave publicable), es FormularioConCuenta: primero se entra con Google o con el
 // correo, y la credencial queda en la cuenta propia de la persona.
 import { useActionState } from "react";
@@ -64,10 +65,15 @@ function Campos({ state, comunidad }: { state: FormState; comunidad: string }) {
   );
 }
 
-function Espera() {
+/** La espera o el error, junto al botón: siempre a la vista, también en el celular (como en FormularioConCuenta). */
+function Estado({ error }: { error?: string }) {
   const { pending } = useFormStatus();
   const t = useT();
-  return <div aria-live="polite">{pending && <Aviso>{t("evento.form.esperando")}</Aviso>}</div>;
+  return (
+    <div aria-live="polite" className="cuenta-estado">
+      {pending ? <Aviso>{t("evento.form.esperando")}</Aviso> : error ? <Aviso tono="alerta">{error}</Aviso> : null}
+    </div>
+  );
 }
 
 function Enviar({ label }: { label: string }) {
@@ -111,10 +117,9 @@ function FormularioDePrueba({ action, slug, eventName, when, ticket, paid, monto
           {paid && <p>{t("evento.form.pagoNota")}</p>}
         </Tarjeta>
         <Campos state={state} comunidad={comunidad} />
-        {state.error && <Aviso tono="alerta">{state.error}</Aviso>}
-        <Espera />
       </div>
       <div className="pantalla-accion">
+        <Estado error={state.error} />
         <Enviar label={paid ? t("evento.form.confirmarPago", { monto }) : t("evento.form.confirmarGratis")} />
         <p className="nota">{t("cuenta.modoPrueba")}</p>
       </div>
