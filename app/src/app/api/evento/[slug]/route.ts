@@ -1,7 +1,10 @@
 // GET /api/evento/<slug>: lo público del evento, sus entradas (con lo que incluye cada una) y su catálogo
-// de beneficios. Sin cuentas ni contratos: eso vive en el servidor.
+// de beneficios. Sin cuentas ni contratos: eso vive en el servidor. Si el evento entra solo por lista
+// (RUMBO_LIST_ONLY_EVENTS), event.registration dice "list_only": la inscripción la lleva quien organiza y
+// POST .../inscripcion contesta 403. En los demás eventos ese campo no viene.
 import { NextResponse, type NextRequest } from "next/server";
 import { isPublicKind } from "@/lib/credential-kinds.ts";
+import { isListOnly } from "@/server/evento/por-lista.ts";
 import { getRepo } from "@/server/repo.ts";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +41,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
       venue: event.venue,
       organizerName: event.organizerName,
       capacity: event.capacity,
+      ...(isListOnly(event) ? { registration: "list_only" } : {}),
     },
     tickets: ticketsOut,
     benefits: benefits.map((b) => ({ id: b.id, name: b.name, kind: b.kind, station: b.station })),

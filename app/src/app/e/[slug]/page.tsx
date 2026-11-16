@@ -1,5 +1,7 @@
 // La página pública del evento: el afiche (nombre, fecha, lugar, qué incluye) y las entradas, cada una
 // con su único botón. Primero se elige la entrada; el formulario viene después, en /e/[slug]/inscripcion.
+// Un evento que entra solo por lista muestra el afiche y, en lugar de las entradas, una línea: la inscripción la
+// lleva quien organiza.
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import "@/components/evento/evento.css";
@@ -9,6 +11,7 @@ import { getLang, getT } from "@/i18n/server.ts";
 import { isPublicKind } from "@/lib/credential-kinds.ts";
 import { isSoldOut, readContractCapacity } from "@/server/evento/cupo.ts";
 import { formatEventWhen, formatEventWhere, joinList } from "@/server/evento/fecha.ts";
+import { isListOnly } from "@/server/evento/por-lista.ts";
 import { panelAccess } from "@/server/panel-sesion.ts";
 import { getRepo, type TicketTypeBenefit } from "@/server/repo.ts";
 
@@ -36,7 +39,9 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   // Un borrador no tiene página: la vista previa de quien organiza no se indexa ni dice nada afuera.
   if (!event || !event.published) return { robots: { index: false, follow: false } };
   const description = event.description || undefined;
-  return { title: event.name, description, openGraph: { title: event.name, description, type: "website" } };
+  const metadata: Metadata = { title: event.name, description, openGraph: { title: event.name, description, type: "website" } };
+  // Un evento que entra solo por lista se abre con su enlace: no sale en el inicio y tampoco se ofrece a los buscadores.
+  return isListOnly(event) ? { ...metadata, robots: { index: false, follow: false } } : metadata;
 }
 
 export default async function EventPage({ params, searchParams }: { params: Params; searchParams: Search }) {
@@ -59,8 +64,10 @@ export default async function EventPage({ params, searchParams }: { params: Para
 
   const when = formatEventWhen(lang, event);
   const hasFree = tickets.some((ticket) => ticket.priceUsdc === 0);
+  // La inscripción la lleva quien organiza: la página no ofrece ninguna entrada, ni la inscripción por equipos.
+  const listOnly = isListOnly(event);
   // Si el contrato de una entrada ya no emite más, la tarjeta dice "Agotada" (se lee una vez por minuto, no en cada carga).
-  const cupos = await Promise.all(tickets.map((ticket) => readContractCapacity(ticket.contractId ?? event.contractId)));
+  const cupos = listOnly ? [] : await Promise.all(tickets.map((ticket) => readContractCapacity(ticket.contractId ?? event.contractId)));
 
   // Qué incluye el evento y con qué entrada viene cada cosa (si no viene con todas). Lo que solo trae una credencial
   // del equipo (la polera del voluntariado) no se promete a quien se inscribe; el premio del sorteo, sí.
@@ -111,7 +118,9 @@ export default async function EventPage({ params, searchParams }: { params: Para
       </header>
       <div className="evento-entradas">
         <h2 className="evento-subtitulo">{t("evento.entradas")}</h2>
-        {tickets.length === 0 ? (
+        {listOnly ? (
+          <Aviso>{t("evento.porLista")}</Aviso>
+        ) : tickets.length === 0 ? (
           <Aviso>{t("evento.sinEntradas")}</Aviso>
         ) : (
           tickets.map((ticket, i) => (
@@ -128,12 +137,12 @@ export default async function EventPage({ params, searchParams }: { params: Para
             />
           ))
         )}
-        {event.teamSignup && tickets.length > 0 && preview && (
+        {!listOnly && event.teamSignup && tickets.length > 0 && preview && (
           <Boton variante="secundario" disabled>
             {t("kit.equipo.boton")}
           </Boton>
         )}
-        {event.teamSignup && tickets.length > 0 && !preview && (
+        {!listOnly && event.teamSignup && tickets.length > 0 && !preview && (
           <BotonEnlace variante="secundario" href={`/e/${encodeURIComponent(slug)}/equipo`}>
             {t("kit.equipo.boton")}
           </BotonEnlace>

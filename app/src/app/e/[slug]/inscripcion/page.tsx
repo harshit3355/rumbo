@@ -1,5 +1,6 @@
 // El formulario para una entrada: nombre y correo. Se llega desde el botón de la entrada, con ?entrada=<id>.
 // Con Pollar prendido, antes se entra con Google o con el correo (la clave publicable va al navegador).
+// Un evento que entra solo por lista no tiene formulario: vuelve a su página, que dice quién lleva la inscripción.
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import "@/components/evento/evento.css";
@@ -9,6 +10,7 @@ import { getLang, getT } from "@/i18n/server.ts";
 import { isPublicKind } from "@/lib/credential-kinds.ts";
 import { pollarPublishableKey } from "@/server/accounts.ts";
 import { formatEventWhen, joinList } from "@/server/evento/fecha.ts";
+import { isListOnly } from "@/server/evento/por-lista.ts";
 import { getRepo } from "@/server/repo.ts";
 import { registerAction } from "./actions.ts";
 
@@ -32,6 +34,7 @@ export default async function RegistrationPage({ params, searchParams }: { param
   const repo = getRepo();
   const event = await repo.getEventBySlug(slug);
   if (!event || !event.published) notFound();
+  if (isListOnly(event)) redirect(`/e/${encodeURIComponent(slug)}`);
   const ticket = typeof entrada === "string" ? await repo.getTicketType(entrada) : null;
   if (!ticket || ticket.eventId !== event.id || !isPublicKind(ticket.credentialKind)) redirect(`/e/${encodeURIComponent(slug)}`);
 

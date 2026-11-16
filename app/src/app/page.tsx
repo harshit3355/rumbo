@@ -1,12 +1,14 @@
 // El inicio: la lista de eventos, cada uno con su página pública. Es para quien se inscribe; las puertas de
 // operación (el panel, el escáner, armar un evento) van en una línea chica al pie. Con cuentas de organizador
 // (Pollar), las dos primeras llevan a /admin, que es donde se entra y se crea; sin ellas, al panel de cada evento
-// con su clave, y armar solo si este servidor lo tiene abierto.
+// con su clave, y armar solo si este servidor lo tiene abierto. Los eventos que entran solo por lista no salen acá:
+// su inscripción la lleva quien organiza, y su página se abre con su enlace.
 import Link from "next/link";
 import { Aviso, BotonEnlace, Chip, Tarjeta } from "@/components/ui.tsx";
 import { getLang, getT } from "@/i18n/server.ts";
 import { pollarEnabled } from "@/server/accounts.ts";
 import { formatEventWhen, formatEventWhere } from "@/server/evento/fecha.ts";
+import { isListOnly } from "@/server/evento/por-lista.ts";
 import { createGate } from "@/server/kit/acceso.ts";
 import { getRepo } from "@/server/repo.ts";
 
@@ -16,7 +18,7 @@ export default async function HomePage() {
   const lang = await getLang();
   const t = await getT();
   const repo = getRepo();
-  const events = (await repo.listEvents()).filter((event) => event.published);
+  const events = (await repo.listEvents()).filter((event) => event.published && !isListOnly(event));
   const cards = await Promise.all(events.map(async (event) => ({ event, tickets: await repo.listTicketTypes(event.id) })));
   const gate = createGate();
   const conCuenta = pollarEnabled();
