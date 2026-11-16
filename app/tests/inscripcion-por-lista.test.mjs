@@ -28,6 +28,7 @@ const { getRepo } = await import("../src/server/repo.ts");
 const stellar = await import("../src/server/stellar.ts");
 const propia = await import("../src/server/cuenta-propia.ts");
 const { evento: textos } = await import("../src/i18n/evento.ts");
+const { panel: textosPanel } = await import("../src/i18n/panel.ts");
 const { LIST_ONLY_ENV, isListOnly, listOnlyEventAt, listedEvents } = await import("../src/server/evento/por-lista.ts");
 const { publicRegistration } = await import("../src/server/evento/inscripcion.ts");
 const { getOrCreateAccessKey } = await import("../src/server/evento/acceso.ts");
@@ -467,6 +468,15 @@ test("una importación sigue emitiendo credenciales, y el panel, el escáner y l
   assert.equal(estado.status, 200);
   const enPanel = new Set(estado.cuerpo.passes.map((p) => p.id));
   assert.ok(pases.every((p) => enPanel.has(p.id)), "el panel lista las credenciales importadas");
+  // Y dice que el evento entra solo por lista: es la comprobación de quien organiza de que la variable lo alcanza.
+  assert.equal(estado.cuerpo.listOnly, true);
+  const claveAbierto = await getOrCreateOrganizerKey(abierto.event.id);
+  const otroPanel = await leer(await panel(new NextRequest(`http://localhost/api/admin/${abierto.slug}?k=${claveAbierto}`), enRuta(abierto.slug)));
+  assert.deepEqual([otroPanel.status, otroPanel.cuerpo.listOnly], [200, false], "el panel de un evento con inscripción abierta no lo dice");
+  process.env[LIST_ONLY_ENV] = "solo-por-lista-2";
+  const malEscrita = await leer(await panel(new NextRequest(`http://localhost/api/admin/${lista.slug}?k=${clave}`), enRuta(lista.slug)));
+  assert.equal(malEscrita.cuerpo.listOnly, false, "con la variable apuntando a otra dirección, el panel deja de decirlo");
+  soloPorLista();
 
   // El escáner: el puesto de la puerta abre y trae las credenciales.
   const puerta = (await ensureStationCodes(lista.event, repo)).find((c) => c.kind === "gate").code;
@@ -588,4 +598,12 @@ test("ninguna ruta ni acción inscribe por su cuenta: todas pasan por una puerta
 test("el texto de la página existe en los dos idiomas y dice quién lleva la inscripción", () => {
   assert.equal(textos.es["evento.porLista"], "La inscripción a este evento la lleva quien organiza.");
   assert.equal(textos.en["evento.porLista"], "Registration for this event is handled by the organizer.");
+});
+
+test("el panel de un evento que entra solo por lista lo dice arriba, en los dos idiomas, y no anuncia que recibe inscripciones", () => {
+  assert.match(textosPanel.es["panel.porLista"], /^Este evento entra solo por lista: nadie se inscribe por su cuenta/);
+  assert.match(textosPanel.en["panel.porLista"], /^This event is list-only: nobody can sign up on their own/);
+  const pantalla = readFileSync(join(APP_DIR, "src", "components", "panel", "PanelCliente.tsx"), "utf8");
+  assert.match(pantalla, /\{state\.listOnly && <Aviso>\{t\("panel\.porLista"\)\}<\/Aviso>\}/);
+  assert.match(pantalla, /\{publicado && !state\.listOnly && <Aviso tono="listo">\{t\("kit\.armar\.publicado"\)\}<\/Aviso>\}/);
 });

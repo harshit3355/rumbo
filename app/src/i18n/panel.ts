@@ -14,6 +14,7 @@ export const panel = {
     "panel.sesionVencidaCorta": "Sesión vencida",
     "panel.volverAEntrar": "Volver a entrar",
     "panel.porSincronizar": "Por sincronizar: {n}",
+    "panel.porLista": "Este evento entra solo por lista: nadie se inscribe por su cuenta y no sale en el inicio. La inscripción la llevás vos, importando la lista o agregando en la puerta.",
 
     "panel.contador.credenciales": "Credenciales",
     "panel.contador.entraron": "Entraron",
@@ -238,6 +239,7 @@ export const panel = {
     "panel.sesionVencidaCorta": "Session expired",
     "panel.volverAEntrar": "Enter again",
     "panel.porSincronizar": "Waiting to sync: {n}",
+    "panel.porLista": "This event is list-only: nobody can sign up on their own and it is not shown on the home page. You handle registration, by importing the list or adding people at the door.",
 
     "panel.contador.credenciales": "Passes",
     "panel.contador.entraron": "Checked in",

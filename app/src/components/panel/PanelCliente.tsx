@@ -197,7 +197,9 @@ export function PanelCliente({
       {/* El enlace para compartir, siempre a mano: para la dueña, quien coorganiza y quien entra con la clave. */}
       <EnlaceDelEvento slug={slug} className="panel-enlace-evento" />
 
-      {publicado && <Aviso tono="listo">{t("kit.armar.publicado")}</Aviso>}
+      {/* "Ya recibe inscripciones" no vale para un evento que entra solo por lista: ese lleva su propia línea. */}
+      {publicado && !state.listOnly && <Aviso tono="listo">{t("kit.armar.publicado")}</Aviso>}
+      {state.listOnly && <Aviso>{t("panel.porLista")}</Aviso>}
       {recienSumado && <Aviso tono="listo">{t("panel.equipo.yaSos", { evento: event.name })}</Aviso>}
       {porPreparar.length > 0 && (
         <div className="aviso panel-por-preparar" role="status">

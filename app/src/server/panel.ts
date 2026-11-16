@@ -25,6 +25,7 @@ import {
   type Repo,
 } from "./repo.ts";
 import { readContractCapacity, smallestCapacity } from "./evento/cupo.ts";
+import { isListOnly } from "./evento/por-lista.ts";
 import { isPermanentContractError, rumboPass, type PassStatusOnChain } from "./stellar.ts";
 
 // ---------- La base ----------
@@ -317,6 +318,8 @@ export interface PanelState {
   /** Los códigos de puesto para los voluntarios: la puerta y una mesa por beneficio. */
   stations: PanelStation[];
   lastChainSync: ChainSyncSummary | null;
+  /** El evento entra solo por lista (RUMBO_LIST_ONLY_EVENTS): nadie se inscribe por su cuenta, y el panel lo dice. */
+  listOnly: boolean;
 }
 
 function toPanelEvent(event: EventRecord): PanelEvent {
@@ -458,6 +461,7 @@ async function collect(event: EventRecord, repo: Repo): Promise<Collected> {
     duplicates,
     stations,
     lastChainSync: await getLastChainSync(event.id),
+    listOnly: isListOnly(event),
   };
   return { state, emails };
 }
