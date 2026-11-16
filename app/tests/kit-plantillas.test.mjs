@@ -220,10 +220,13 @@ test("publicar prepara el contrato de cada entrada y deja el evento a la vista; 
   assert.equal((await repo.getEventById(event.id)).published, true);
   const types = await repo.listTicketTypes(event.id);
   assert.ok(types.every((t) => /^CFALSO\d$/.test(t.contractId)));
-  // Cada contrato se crea con el cupo del evento y con tantos canjes como trae esa entrada.
+  // Cada contrato se crea con el cupo del evento y con lugar para 64 canjes (el máximo del contrato), aunque esa
+  // entrada traiga tres: así se le pueden sumar canjes con el evento publicado.
   const asistente = types.find((t) => t.templateSlot === "attendee");
   const pedidoAsistente = pedidos[types.indexOf(asistente)];
-  assert.deepEqual([pedidoAsistente.price, pedidoAsistente.capacity, pedidoAsistente.benefits], [0, 300, 3]);
+  assert.equal((await repo.listTicketTypeBenefits(asistente.id)).length, 3);
+  assert.deepEqual([pedidoAsistente.price, pedidoAsistente.capacity, pedidoAsistente.benefits], [0, 300, 64]);
+  assert.deepEqual(pedidos.map((p) => p.benefits), [64, 64, 64, 64, 64, 64], "todos los tipos, traigan los canjes que traigan");
 
   // Publicar otra vez no vuelve a crear nada, y un publicado ya no se edita.
   assert.deepEqual(await publishEvent(repo, await repo.getEventById(event.id), falso), { ok: true, deployed: 0 });

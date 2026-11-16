@@ -182,9 +182,10 @@ test("importar a alguien del equipo antes de que su tipo tenga contrato: el cont
   const contrato = (await repo.getTicketType(orador.id)).contractId;
   assert.equal(contrato, "CEQUIPO1");
   assert.deepEqual(registros.map((r) => r.contractId), [contrato, contrato, contrato]);
-  // El cupo y los canjes del contrato nuevo son los del tipo.
+  // El cupo del contrato nuevo es el del evento, y nace con lugar para 64 canjes (el máximo del contrato), como al publicar.
   assert.equal(d.creados[0].capacity, abierto.capacity);
-  assert.equal(d.creados[0].benefits, (await repo.listTicketTypeBenefits(orador.id)).length);
+  assert.equal(d.creados[0].benefits, 64);
+  assert.ok((await repo.listTicketTypeBenefits(orador.id)).length < 64, "trae menos canjes que el lugar que tiene");
   // Y el avance de publicar lo cuenta.
   const avance = await pub.publishProgress(repo, abierto);
   assert.equal(avance.done, avance.publicTotal + 1);

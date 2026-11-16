@@ -1,5 +1,6 @@
 // Publicar un borrador: cada tipo de entrada necesita su propio contrato (el precio, el cupo y cuántos canjes
-// tiene son fijos por contrato), y recién después el evento se ve en la página pública y recibe inscripciones.
+// admite son fijos por contrato), y recién después el evento se ve en la página pública y recibe inscripciones.
+// Cada contrato nace con lugar para CONTRACT_BENEFIT_SLOTS canjes, tenga los que tenga tildados su tipo.
 // Quien despliega los contratos es un `ContractProvisioner`: el de verdad (networkProvisioner) los crea en la red
 // de prueba desde el WASM que ya subió el despliegue de muestra; las pruebas usan uno falso, sin red.
 //
@@ -24,7 +25,7 @@ export interface ContractSpec {
   /** En USDC de prueba. 0 es gratis. */
   price: number;
   capacity: number;
-  /** Cuántos canjes tiene (de 0 a benefits - 1). */
+  /** Cuántos canjes admite (los números de 0 a benefits - 1). */
   benefits: number;
   /** La cuenta de quien organiza, a donde van los pagos. Null: la del despliegue de muestra. */
   organizerAccount: string | null;
@@ -74,8 +75,8 @@ const publishTurn = (eventId: string) => `publish:${eventId}`;
 
 /**
  * Corre fn con el turno de publicar del evento, o devuelve BUSY si un paso está corriendo. Guardar el borrador lo
- * usa: un paso lee cuántos canjes trae un tipo, despliega su contrato con ese número y recién después lo guarda;
- * si el borrador cambiara en el medio, el contrato quedaría con otro número.
+ * usa: un paso lee el precio de un tipo, despliega su contrato con ese precio y recién después lo guarda; si el
+ * borrador cambiara en el medio, el contrato quedaría con otro precio.
  */
 export function withPublishTurn<T>(eventId: string, fn: () => Promise<T>): Promise<T | typeof BUSY> {
   return tryExclusive(publishTurn(eventId), fn);
@@ -108,10 +109,12 @@ export async function publishProgress(repo: Repo, event: EventRecord): Promise<P
 /** Si todavía queda algo por preparar: el evento sin publicar, o algún tipo sin contrato. */
 export const isPublishPending = (p: PublishProgress): boolean => !p.published || p.done < p.total;
 
+// 64 es el máximo que acepta el contrato (MAX_BENEFITS en contracts/rumbo-pass/src/lib.rs): así queda lugar para sumar canjes después de publicar.
+export const CONTRACT_BENEFIT_SLOTS = 64;
+
 /** Crea el contrato de un tipo, lo guarda si sigue sin uno y le avisa a Pollar. Devuelve el contrato que quedó. */
 async function deployFor(repo: Repo, event: EventRecord, type: TicketType, provisioner: ContractProvisioner): Promise<{ contractId: string; created: boolean }> {
-  const benefits = (await repo.listTicketTypeBenefits(type.id)).length;
-  const contractId = await provisioner.deploy({ price: type.priceUsdc, capacity: event.capacity ?? 0, benefits, organizerAccount: event.organizerAccount });
+  const contractId = await provisioner.deploy({ price: type.priceUsdc, capacity: event.capacity ?? 0, benefits: CONTRACT_BENEFIT_SLOTS, organizerAccount: event.organizerAccount });
   await noteEventContract(event.id, type.id, contractId);
   // Solo si la entrada sigue sin contrato: el que ya tiene (con inscriptos, quizás) no se pisa nunca.
   if (await repo.setTicketTypeContractIfEmpty(type.id, contractId)) {
