@@ -6,8 +6,8 @@ import { describeForLog } from "@/server/log.ts";
 import { authorizePanelRequest } from "@/server/panel-sesion.ts";
 
 export const dynamic = "force-dynamic";
-/** Consultar la cadena pase por pase puede tardar: hasta un minuto antes de cortar. */
-export const maxDuration = 60;
+/** Consultar la cadena pase por pase puede tardar, y si se corta empieza de cero: hasta cinco minutos, como importar. */
+export const maxDuration = 300;
 
 type Context = { params: Promise<{ slug: string }> };
 
