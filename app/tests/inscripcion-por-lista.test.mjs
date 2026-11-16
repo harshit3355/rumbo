@@ -9,7 +9,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { beforeEach, test } from "node:test";
-import { APP_DIR, entornoDePrueba, pedido } from "./lib/entorno.mjs";
+import { APP_DIR, capturarConsola, entornoDePrueba, pedido } from "./lib/entorno.mjs";
 
 entornoDePrueba();
 process.env.RUMBO_TRUSTED_IP_HEADER = "x-real-ip";
@@ -28,7 +28,7 @@ const { getRepo } = await import("../src/server/repo.ts");
 const stellar = await import("../src/server/stellar.ts");
 const propia = await import("../src/server/cuenta-propia.ts");
 const { evento: textos } = await import("../src/i18n/evento.ts");
-const { LIST_ONLY_ENV, isListOnly, listOnlyEventAt } = await import("../src/server/evento/por-lista.ts");
+const { LIST_ONLY_ENV, isListOnly, listOnlyEventAt, listedEvents } = await import("../src/server/evento/por-lista.ts");
 const { publicRegistration } = await import("../src/server/evento/inscripcion.ts");
 const { getOrCreateAccessKey } = await import("../src/server/evento/acceso.ts");
 const { createEventFromTemplate } = await import("../src/server/kit/plantillas.ts");
@@ -195,6 +195,85 @@ test("la variable: direcciones separadas por coma, sin distinguir mayúsculas ni
   // Una dirección que solo empieza igual, o que la contiene, es otro evento.
   process.env[LIST_ONLY_ENV] = "solo-por-lista-2,solo-por,por-lista";
   assert.equal(isListOnly(lista.event), false);
+});
+
+test("la variable se lee con tolerancia: comillas pegadas, punto y coma, la ruta o el enlace entero, y lo que se cuela al copiar y pegar", async () => {
+  const ZWSP = String.fromCodePoint(0x200b);
+  const BOM = String.fromCodePoint(0xfeff);
+  const cierran = [
+    '"solo-por-lista,otro"',
+    "'otro','solo-por-lista'",
+    `${String.fromCodePoint(0x201c)}solo-por-lista${String.fromCodePoint(0x201d)}`,
+    "otro;solo-por-lista",
+    "otro ; solo-por-lista ;",
+    "/e/solo-por-lista",
+    "e/solo-por-lista/",
+    "/e/solo-por-lista/inscripcion?entrada=1",
+    "/admin/solo-por-lista",
+    "https://rumbo.example.com/e/solo-por-lista",
+    "https://rumbo.example.com/e/Solo-Por-Lista?lang=en#entradas",
+    "rumbo.example.com/solo-por-lista",
+    `${BOM}solo-por-lista${ZWSP}`,
+    `otro,${ZWSP}solo-por-${ZWSP}lista`,
+  ];
+  for (const valor of cierran) {
+    process.env[LIST_ONLY_ENV] = valor;
+    assert.equal(isListOnly(lista.event), true, JSON.stringify(valor));
+    assert.equal(isListOnly(abierto.event), false, `${JSON.stringify(valor)} no alcanza a otro evento`);
+    assert.equal((await listOnlyEventAt(repo, lista.slug))?.id, lista.event.id, JSON.stringify(valor));
+  }
+  // Con la variable entre comillas, como queda al pegarla en un panel de variables, la API contesta que no.
+  process.env[LIST_ONLY_ENV] = '"solo-por-lista"';
+  assert.deepEqual(await porApi(lista.slug, { ticketTypeId: lista.gratis.id, email: correo("comillas") }), { status: 403, cuerpo: { error: "list_only" } });
+});
+
+test("lo que no tiene forma de dirección no cierra nada y queda avisado en el registro, una sola vez", async () => {
+  process.env[LIST_ONLY_ENV] = "solo_por_lista, con-inscripcion";
+  const primera = await capturarConsola(async () => [isListOnly(lista.event), isListOnly(abierto.event)]);
+  assert.deepEqual(primera.resultado, [false, true], "la entrada mal escrita no cierra su evento; la buena sí cierra el suyo");
+  const avisos = primera.lineas.filter((l) => l.includes("[por-lista]"));
+  assert.equal(avisos.length, 1, primera.lineas.join("\n"));
+  assert.match(avisos[0], /RUMBO_LIST_ONLY_EVENTS trae "solo_por_lista"/);
+  assert.match(avisos[0], /no cierra ningún evento/);
+
+  // El mismo problema no se repite en cada pedido, ni cuando la variable cambia y vuelve.
+  process.env[LIST_ONLY_ENV] = "solo_por_lista";
+  const segunda = await capturarConsola(async () => [isListOnly(lista.event), await listOnlyEventAt(repo, lista.slug)]);
+  assert.deepEqual(segunda.resultado, [false, null]);
+  assert.deepEqual(segunda.lineas, []);
+});
+
+test("el inicio lista los publicados que no entran solo por lista, y avisa de una dirección de la variable que no es de ningún evento", async () => {
+  const todos = await repo.listEvents();
+  const direcciones = (eventos) => eventos.map((e) => e.slug).sort();
+  const publicados = direcciones(todos.filter((e) => e.published));
+  assert.ok(publicados.includes(lista.slug) && publicados.includes(abierto.slug) && !publicados.includes(borrador.slug));
+
+  // Sin la variable salen todos los publicados y ningún borrador, y no se avisa nada.
+  const libre = await capturarConsola(async () => direcciones(listedEvents(todos)));
+  assert.deepEqual(libre.resultado, publicados);
+  assert.deepEqual(libre.lineas, []);
+
+  // Con la variable, el evento de la lista no sale; los demás, sí.
+  process.env[LIST_ONLY_ENV] = "solo-por-lista, todavia-borrador";
+  const cerrado = await capturarConsola(async () => direcciones(listedEvents(todos)));
+  assert.deepEqual(cerrado.resultado, publicados.filter((slug) => slug !== lista.slug));
+  assert.deepEqual(cerrado.lineas, [], "un borrador de la variable es un evento que existe: no hay nada que avisar");
+
+  // La dirección real terminó siendo otra (el evento se volvió a crear y quedó con otro final): el evento sale en
+  // el inicio, y el registro dice que la variable nombra una dirección que no es de nadie.
+  process.env[LIST_ONLY_ENV] = "solo-por-lista-2";
+  const corrida = await capturarConsola(async () => direcciones(listedEvents(todos)));
+  assert.deepEqual(corrida.resultado, publicados);
+  assert.equal(corrida.lineas.length, 1, corrida.lineas.join("\n"));
+  assert.match(corrida.lineas[0], /\[por-lista\] RUMBO_LIST_ONLY_EVENTS nombra "solo-por-lista-2", que no es la dirección de ningún evento/);
+  const otraVez = await capturarConsola(async () => listedEvents(todos).length);
+  assert.deepEqual(otraVez.lineas, [], "una vez por proceso");
+
+  // Datos sueltos, sin la base: solo cuentan publicado y la dirección.
+  process.env[LIST_ONLY_ENV] = "uno";
+  assert.deepEqual(listedEvents([{ slug: "uno", published: true }, { slug: "dos", published: true }, { slug: "tres", published: false }]), [{ slug: "dos", published: true }]);
+  assert.deepEqual(listedEvents([]), []);
 });
 
 test("el evento se resuelve primero y se compara su dirección de ahora: vale por la vieja, y una vieja en la variable no cierra nada", async () => {

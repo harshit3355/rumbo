@@ -9,7 +9,8 @@ import type { EventRecord, Repo } from "../repo.ts";
 
 export const SLUG_MIN = 3;
 export const SLUG_MAX = 60;
-const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** La forma de una dirección: minúsculas y números, en tramos separados por un guion. */
+export const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
  * Lo que no puede ser la dirección de un evento: las rutas de la app que viven al lado de /admin/<evento> y de
