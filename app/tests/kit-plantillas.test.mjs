@@ -280,3 +280,25 @@ test("un evento de varios días dice cuándo termina; uno de un día, solo la ho
   const meetup = await createEventFromTemplate(repo, datos("meetup", { name: "Meetup de fechas" }));
   assert.equal(formatEventWhen("es", meetup).time, "09:00 a 12:00");
 });
+
+test("el lugar con el que nace cada contrato es el máximo que acepta el contrato, ni uno más ni uno menos", async () => {
+  // CONTRACT_BENEFIT_SLOTS (lo que pide la app al publicar) y MAX_BENEFITS (lo que acepta el contrato) se escriben en
+  // dos lugares. Si el del contrato baja, el constructor rechaza todos los contratos nuevos y publicar falla recién
+  // en la red; si sube, la app sigue dejando menos lugar del que hay.
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { APP_DIR } = await import("./lib/entorno.mjs");
+  const { CONTRACT_BENEFIT_SLOTS } = await import("../src/server/kit/publicar.ts");
+  const fuente = readFileSync(join(APP_DIR, "..", "contracts", "rumbo-pass", "src", "lib.rs"), "utf8");
+  const declarado = /^pub const MAX_BENEFITS: u32 = ([\d_]+);/m.exec(fuente);
+  assert.ok(declarado, "contracts/rumbo-pass/src/lib.rs ya no declara MAX_BENEFITS como se esperaba");
+  assert.equal(CONTRACT_BENEFIT_SLOTS, Number(declarado[1].replaceAll("_", "")));
+  // Y el contrato sigue rechazando solo lo que pasa del máximo: pedir justo el máximo vale.
+  assert.match(fuente, /if benefits > MAX_BENEFITS \{/);
+
+  // Lo que llega al desplegador al publicar es ese número, tenga el tipo los canjes que tenga.
+  const pedidos = [];
+  const event = await createEventFromTemplate(repo, datos("meetup", { name: "Meetup con lugar de sobra" }));
+  assert.equal((await publishEvent(repo, event, { deploy: async (spec) => (pedidos.push(spec.benefits), `CLUGAR${pedidos.length}`) })).ok, true);
+  assert.ok(pedidos.length > 0 && pedidos.every((n) => n === CONTRACT_BENEFIT_SLOTS), JSON.stringify(pedidos));
+});
