@@ -144,6 +144,13 @@ test("el guion no toma el turno de la cuenta que paga en ninguna base: fija sqli
   }
 });
 
+test("ninguna llave sale del guion como argumento de otro programa, y no lleva rutas de una máquina", () => {
+  const guion = readFileSync(join(APP_DIR, "scripts", "setup-dev.mjs"), "utf8");
+  assert.doesNotMatch(guion, /child_process|spawn|exec(File)?Sync|--source-account/, "el guion le pasa algo a otro programa");
+  assert.doesNotMatch(guion, /[A-Za-z]:\\\\|\/Users\/|\/home\//, "el guion lleva una ruta de una máquina");
+  assert.match(guion, /await deploySacWithSdk\(asset\);/);
+});
+
 test("el guion decide con esa función y corta antes de generar una llave o de tocar la red", () => {
   const guion = readFileSync(join(APP_DIR, "scripts", "setup-dev.mjs"), "utf8");
   assert.match(guion, /const mode = deployMode\(\{/);

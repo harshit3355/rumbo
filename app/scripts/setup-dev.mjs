@@ -1,7 +1,7 @@
 // Prepara el entorno de desarrollo en la red de prueba de Stellar:
 //   1. genera en .env.local las llaves que falten (servidor, puerta, emisor del USDC de prueba, quien organiza, Rumbo),
 //   2. fondea cada cuenta con friendbot,
-//   3. despliega el USDC de prueba como contrato de activo (SAC) con stellar-cli, si no está,
+//   3. despliega el USDC de prueba como contrato de activo (SAC), si no está,
 //   4. deja con línea de confianza a quien organiza y a Rumbo, para que puedan recibir el pago,
 //   5. y, si las llaves no son las del despliegue de muestra, arma un despliegue propio (abajo).
 // Se puede correr las veces que haga falta: solo hace lo que falta. Nunca toca otra red que la de prueba.
@@ -16,7 +16,6 @@
 //
 // Con despliegue propio, .env.local se escribe una sola vez y al final. Si la red de prueba o friendbot no contestan,
 // queda como estaba y alcanza con correr de nuevo.
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { KEY_NAMES, deployMode, saysNotOurContract } from "./lib/despliegue.mjs";
@@ -40,8 +39,6 @@ process.env.RUMBO_REPO = "sqlite";
 
 const { Asset, BASE_FEE, Keypair, Networks, Operation, StrKey, TransactionBuilder, rpc, xdr } = await import("@stellar/stellar-sdk");
 const stellar = await import("../src/server/stellar.ts");
-
-const STELLAR_CLI = process.env.STELLAR_CLI || "C:\\Users\\ASUS\\AppData\\Local\\Programs\\stellar-cli\\stellar.exe";
 
 const KEYS = [
   ["STELLAR_SPONSOR_SECRET", "El servidor (paga las comisiones de red)", "sponsor"],
@@ -143,19 +140,7 @@ async function sacExists(sacId) {
   }
 }
 
-function deploySacWithCli(code, issuer) {
-  if (!existsSync(STELLAR_CLI)) return false;
-  const result = spawnSync(
-    STELLAR_CLI,
-    ["contract", "asset", "deploy", "--asset", `${code}:${issuer.publicKey()}`, "--source-account", process.env.STELLAR_SPONSOR_SECRET, "--network", "testnet"],
-    { encoding: "utf8" },
-  );
-  if (result.status === 0) return true;
-  if (/already|exist/i.test(result.stderr || "")) return true;
-  console.warn(`stellar-cli no pudo desplegar el activo: ${(result.stderr || "").trim().slice(0, 300)}`);
-  return false;
-}
-
+/** Despliega el contrato del activo desde acá, con la cuenta que paga: ninguna llave sale de este proceso. */
 async function deploySacWithSdk(asset) {
   const server = stellar.getRpc();
   const sponsor = stellar.getSponsor();
@@ -354,7 +339,7 @@ async function main() {
   if (await sacExists(sacId)) {
     console.log(`Ya existía  El contrato del USDC de prueba: ${sacId}`);
   } else {
-    if (!deploySacWithCli(code, issuer)) await deploySacWithSdk(asset);
+    await deploySacWithSdk(asset);
     console.log(`Desplegado  El contrato del USDC de prueba: ${sacId}`);
   }
 
