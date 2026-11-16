@@ -8,7 +8,7 @@ import { Aviso, BotonEnlace, Chip, Tarjeta } from "@/components/ui.tsx";
 import { getLang, getT } from "@/i18n/server.ts";
 import { pollarEnabled } from "@/server/accounts.ts";
 import { formatEventWhen, formatEventWhere } from "@/server/evento/fecha.ts";
-import { isListOnly } from "@/server/evento/por-lista.ts";
+import { listedEvents } from "@/server/evento/por-lista.ts";
 import { createGate } from "@/server/kit/acceso.ts";
 import { getRepo } from "@/server/repo.ts";
 
@@ -18,7 +18,7 @@ export default async function HomePage() {
   const lang = await getLang();
   const t = await getT();
   const repo = getRepo();
-  const events = (await repo.listEvents()).filter((event) => event.published && !isListOnly(event));
+  const events = listedEvents(await repo.listEvents());
   const cards = await Promise.all(events.map(async (event) => ({ event, tickets: await repo.listTicketTypes(event.id) })));
   const gate = createGate();
   const conCuenta = pollarEnabled();

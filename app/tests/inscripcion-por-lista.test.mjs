@@ -575,10 +575,14 @@ test("ninguna ruta ni acción inscribe por su cuenta: todas pasan por una puerta
   const equipos = readFileSync(join(src, "server", "kit", "equipos.ts"), "utf8");
   assert.ok(equipos.indexOf("listOnlyEventAt(repo, input.slug)") > 0 && equipos.indexOf("listOnlyEventAt(repo, input.slug)") < equipos.indexOf("registerForEvent({"), "los equipos miran la lista antes de inscribir");
 
-  // Y las pantallas que ofrecen inscribirse miran la lista: el inicio, la página del evento y los dos formularios.
-  for (const pantalla of ["app/page.tsx", "app/e/[slug]/page.tsx", "app/e/[slug]/inscripcion/page.tsx", "app/e/[slug]/equipo/page.tsx"]) {
+  // Y las pantallas que ofrecen inscribirse miran la lista: la página del evento y los dos formularios. El inicio
+  // arma su lista con listedEvents, que se prueba con datos más arriba, y no trae eventos por otro lado.
+  for (const pantalla of ["app/e/[slug]/page.tsx", "app/e/[slug]/inscripcion/page.tsx", "app/e/[slug]/equipo/page.tsx"]) {
     assert.match(readFileSync(join(src, ...pantalla.split("/")), "utf8"), /\bisListOnly\(event\)/, `${pantalla} no mira la lista`);
   }
+  const inicio = readFileSync(join(src, "app", "page.tsx"), "utf8");
+  assert.match(inicio, /const events = listedEvents\(await repo\.listEvents\(\)\);/, "el inicio no arma su lista con listedEvents");
+  assert.equal(inicio.match(/repo\.(listEvents\w*|getEvent\w*)\(/g)?.length, 1, "el inicio trae eventos por otro lado, sin pasar por listedEvents");
 });
 
 test("el texto de la página existe en los dos idiomas y dice quién lleva la inscripción", () => {
