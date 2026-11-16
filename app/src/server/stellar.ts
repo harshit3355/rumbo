@@ -215,7 +215,7 @@ export interface DeployInfo {
   raw: Record<string, unknown>;
 }
 
-/** Dónde deja el agente del contrato lo público de lo que desplegó. */
+/** Dónde queda lo público del despliegue del contrato. */
 export function deployInfoPath(): string {
   return getEnv("RUMBO_DEPLOY_JSON") ?? path.join(repoRoot(), "contracts", "rumbo-pass", "deploy", "testnet.json");
 }
