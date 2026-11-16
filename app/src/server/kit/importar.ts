@@ -539,22 +539,53 @@ export async function activateBatch(repo: Repo, event: EventRecord, runId: strin
   return outcome;
 }
 
+/**
+ * Las credenciales que fallaron la última vez que se intentaron, en el orden en que fallaron. Viaja en el resumen
+ * guardado de la importación (no hay columna para esto) y no sale de acá: importStatus no la devuelve.
+ */
+const RETRY_LAST = "retryLast";
+
+function retryLastOf(summary: unknown): string[] {
+  const ids = (summary as Record<string, unknown> | null)?.[RETRY_LAST];
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+}
+
+/**
+ * La fila de una importación: primero las que nunca fallaron, en el orden de la lista, y al final las que fallaron,
+ * en el orden en que fallaron. Así una credencial que no se puede preparar (la persona ya tiene su cuenta propia, y
+ * el servidor no firma por ella) no frena a las de atrás: con cinco de esas al principio, cada tanda intentaba las
+ * mismas cinco y la importación no avanzaba nunca.
+ */
+export function importQueue<T extends { id: string }>(pending: readonly T[], retryLast: readonly string[]): T[] {
+  const turn = new Map(retryLast.map((id, i) => [id, i] as const));
+  const failedBefore = pending.filter((p) => turn.has(p.id)).sort((a, b) => (turn.get(a.id) ?? 0) - (turn.get(b.id) ?? 0));
+  return [...pending.filter((p) => !turn.has(p.id)), ...failedBefore];
+}
+
 async function runBatch(repo: Repo, event: EventRecord, runId: string, size: number, deps: ImportDeps, pendingOf: () => Promise<Pass[]>): Promise<BatchResult> {
   const run = await repo.getImportRun(runId);
   if (!run || run.eventId !== event.id) throw new Error(`No existe la importación ${runId} en este evento`);
-  const batch = (await pendingOf()).slice(0, Math.max(1, Math.min(size, MAX_BATCH_SIZE)));
+  const failedBefore = retryLastOf(run.summary);
+  const batch = importQueue(await pendingOf(), failedBefore).slice(0, Math.max(1, Math.min(size, MAX_BATCH_SIZE)));
   const result: BatchResult = { processed: batch.length, activated: 0, emailsSent: 0, emailsFailed: 0, linkOnly: 0, failed: 0, remaining: 0, busy: false };
+  const failedNow: string[] = [];
   for (const pass of batch) {
     const outcome = await activateOne(repo, event, pass, deps);
-    if (outcome === "failed") result.failed++;
-    else {
+    if (outcome === "failed") {
+      result.failed++;
+      failedNow.push(pass.id);
+    } else {
       result.activated++;
       if (outcome === "emailed") result.emailsSent++;
       else if (outcome === "link_only") result.linkOnly++;
       else result.emailsFailed++;
     }
   }
-  result.remaining = (await pendingOf()).length;
+  const stillPending = new Set((await pendingOf()).map((p) => p.id));
+  result.remaining = stillPending.size;
+  // Las de esta tanda que fallaron pasan al final de la fila; las que fallaron antes y no se tocaron conservan su lugar.
+  const tried = new Set(batch.map((p) => p.id));
+  const retryLast = [...failedBefore.filter((id) => !tried.has(id) && stillPending.has(id)), ...failedNow];
   const summary = run.summary as unknown as ImportSummary;
   await repo.updateImportRun(runId, {
     ...summary,
@@ -564,6 +595,7 @@ async function runBatch(repo: Repo, event: EventRecord, runId: string, size: num
     linkOnly: (summary.linkOnly ?? 0) + result.linkOnly,
     // Lo que falló y sigue pendiente es lo que falló en la última tanda: se vuelve a intentar.
     failed: result.failed,
+    [RETRY_LAST]: retryLast,
   });
   return result;
 }
@@ -620,7 +652,9 @@ export async function importStatus(repo: Repo, runId: string): Promise<{ summary
   const run = await repo.getImportRun(runId);
   if (!run) return null;
   const remaining = (await repo.listPassesByImportRun(runId)).filter((p) => p.status === "pending").length;
-  return { summary: run.summary as unknown as ImportSummary, remaining };
+  // La fila de las que fallaron es de la cocina de las tandas: no va a la pantalla ni al asistente.
+  const { [RETRY_LAST]: _queue, ...summary } = run.summary as Record<string, unknown>;
+  return { summary: summary as unknown as ImportSummary, remaining };
 }
 
 // ---------- Los enlaces, para quien organiza ----------

@@ -31,6 +31,8 @@ const { evento: textos } = await import("../src/i18n/evento.ts");
 const { panel: textosPanel } = await import("../src/i18n/panel.ts");
 const { LIST_ONLY_ENV, isListOnly, listOnlyEventAt, listedEvents } = await import("../src/server/evento/por-lista.ts");
 const { publicRegistration } = await import("../src/server/evento/inscripcion.ts");
+const { PollarAccountProvider } = await import("../src/server/accounts.ts");
+const { activateBatch, importQueue, importStatus, parseGuests, prepareImport } = await import("../src/server/kit/importar.ts");
 const { getOrCreateAccessKey } = await import("../src/server/evento/acceso.ts");
 const { createEventFromTemplate } = await import("../src/server/kit/plantillas.ts");
 const { changeEventSlug } = await import("../src/server/kit/direccion.ts");
@@ -490,6 +492,49 @@ test("una importación sigue emitiendo credenciales, y el panel, el escáner y l
   const abierta = await leer(await credencial(new NextRequest(`http://localhost/api/pase/${pases[0].id}?k=${k}`), { params: Promise.resolve({ passId: pases[0].id }) }));
   assert.equal(abierta.status, 200);
   assert.deepEqual([abierta.cuerpo.event.slug, abierta.cuerpo.person.name], [lista.slug, "Ana Lista"]);
+});
+
+test("quien ya tiene su cuenta propia no frena la importación: su credencial queda pendiente al final de la fila y las de atrás salen", async () => {
+  soloPorLista();
+  // Nueve personas aprobadas. Las seis primeras de la fila ya entraron alguna vez con su cuenta propia con ese correo:
+  // el servidor no puede firmar por ellas, así que su credencial no se puede preparar desde la importación.
+  const gente = Array.from({ length: 9 }, (_, i) => [`Persona ${i + 1}`, correo(`fila-${i + 1}`)]);
+  const { run } = await prepareImport(repo, lista.event, parseGuests(CSV(gente)), { statuses: ["approved"], mapping: {}, defaultTypeId: lista.gratis.id });
+  const fila = await repo.listPassesByImportRun(run.id);
+  assert.equal(fila.length, 9);
+  const conCuenta = fila.slice(0, 6);
+  for (const pase of conCuenta) assert.equal(await repo.linkWallet({ personId: pase.personId, provider: "pollar", publicKey: Keypair.random().publicKey() }), true);
+  const sinCuenta = fila.slice(6);
+
+  const deps = { accounts: new PollarAccountProvider(repo, globalThis.__rumboAccounts), chain: globalThis.__rumboKitChain, mailer: globalThis.__rumboMailer, lang: "es" };
+  const tanda = async () => (await capturarConsola(() => activateBatch(repo, lista.event, run.id, 5, deps))).resultado;
+  const estadoDe = async (pases) => Promise.all(pases.map(async (p) => (await repo.getPass(p.id)).status));
+
+  // La primera tanda toma las cinco primeras: ninguna sale, y pasan al final de la fila.
+  const primera = await tanda();
+  assert.deepEqual([primera.processed, primera.activated, primera.failed, primera.remaining], [5, 0, 5, 9]);
+
+  // La segunda no vuelve sobre las mismas cinco: toma las que siguen, y las tres sin cuenta propia tienen su credencial.
+  const segunda = await tanda();
+  assert.deepEqual([segunda.processed, segunda.activated, segunda.failed, segunda.remaining], [5, 3, 2, 6]);
+  assert.deepEqual(await estadoDe(sinCuenta), ["active", "active", "active"]);
+
+  // Lo que queda son las seis con cuenta propia: siguen pendientes, sin cuenta del servidor ni lugar en el evento.
+  const tercera = await tanda();
+  assert.deepEqual([tercera.activated, tercera.failed, tercera.remaining], [0, 5, 6]);
+  assert.deepEqual(await estadoDe(conCuenta), Array(6).fill("pending"));
+  assert.ok((await Promise.all(conCuenta.map((p) => repo.getPass(p.id)))).every((p) => p.account === null));
+
+  // La pantalla recibe el resumen de siempre, sin la fila de adentro.
+  const estado = await importStatus(repo, run.id);
+  assert.deepEqual([estado.remaining, estado.summary.activated, estado.summary.failed, "retryLast" in estado.summary], [6, 3, 5, false]);
+
+  // La fila, con datos sueltos: primero las que nunca fallaron, en su orden; al final las que fallaron, en el orden en que fallaron.
+  const ids = (lista) => lista.map((p) => p.id);
+  const pendientes = ["a", "b", "c", "d"].map((id) => ({ id }));
+  assert.deepEqual(ids(importQueue(pendientes, [])), ["a", "b", "c", "d"]);
+  assert.deepEqual(ids(importQueue(pendientes, ["c", "a"])), ["b", "d", "c", "a"]);
+  assert.deepEqual(ids(importQueue(pendientes, ["ya-no-esta", "d"])), ["a", "b", "c", "d"]);
 });
 
 test("las herramientas del asistente de quien organiza siguen andando, y dicen que el evento entra solo por lista", async () => {
