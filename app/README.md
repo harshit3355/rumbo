@@ -4,17 +4,21 @@ La página pública del evento, la inscripción gratis o la entrada paga, la cre
 
 ## Levantarla desde cero
 
-Hace falta Node 24 o más nuevo (trae `node:sqlite`) y pnpm. Rust y `stellar-cli` solo hacen falta para compilar o desplegar el contrato; la app usa los contratos ya desplegados que describe [contracts/rumbo-pass/deploy/testnet.json](../contracts/rumbo-pass/deploy/testnet.json).
+Hace falta Node 24 (la versión que fija `package.json`; trae `node:sqlite`) y pnpm. Rust y `stellar-cli` solo hacen falta para compilar o desplegar el contrato: la app usa el código de contrato que ya está subido a la red de prueba, el que describe [contracts/rumbo-pass/deploy/testnet.json](../contracts/rumbo-pass/deploy/testnet.json).
 
 ```bash
 cd app
 pnpm install
-pnpm setup:dev     # las llaves del servidor en .env.local, fondeadas con friendbot; el USDC de prueba y su contrato; las líneas de confianza
+pnpm setup:dev     # las llaves del servidor en .env.local, fondeadas con friendbot; el USDC de prueba y su contrato; las líneas de confianza; y un despliegue propio para esas llaves
 pnpm seed          # el evento de muestra, "Hackatón de la comunidad", con sus entradas y beneficios
 pnpm dev           # http://localhost:3000
 ```
 
-Los dos scripts se pueden correr las veces que haga falta: solo hacen lo que falta. Después:
+Los dos scripts se pueden correr las veces que haga falta: solo hacen lo que falta.
+
+**El despliegue propio.** Los contratos de muestra de `deploy/testnet.json` aceptan una sola puerta y un solo USDC de prueba, los de quien los desplegó, así que en un clon nuevo `pnpm setup:dev` arma un despliegue propio con las llaves que genera: un contrato gratis y uno pago, anotados en `data/despliegue-local.json`, y `RUMBO_DEPLOY_JSON` apuntando ahí en `.env.local`. Con eso, inscribirse, marcar la entrada, canjear y cobrar la entrada paga andan en tu máquina sin pedirle una llave a nadie. La primera vez tarda cerca de un minuto y las siguientes unos segundos, porque no vuelve a desplegar lo que sirve. Si la red de prueba o friendbot no contestan, lo dice y deja `.env.local` como estaba: alcanza con correrlo de nuevo. Si borrás `data/`, corrélo otra vez antes de `pnpm seed`. Con las llaves del despliegue de muestra en `.env.local` no arma nada y usa ese.
+
+Para entregar un cambio, abajo: "Cómo aportar". Después de levantarla:
 
 - **El evento:** `http://localhost:3000/e/hackaton-comunidad`. "Inscribirme" o "Comprar", nombre y correo, y la credencial tarda entre quince y cuarenta segundos (la red de prueba crea la cuenta, le da saldo y la inscribe en el contrato). El correo con el enlace personal queda en `data/correos/` (la consola dice a qué dominio fue y en qué carpeta está, nunca el enlace).
 - **El panel:** `node scripts/panel-clave.mjs` imprime el enlace del panel con su clave (`/admin/hackaton-comunidad?k=...`) y los códigos de puesto para los voluntarios. El informe para quien auspicia está en `/admin/hackaton-comunidad/informe`.
@@ -24,7 +28,7 @@ Los dos scripts se pueden correr las veces que haga falta: solo hacen lo que fal
 
 `pnpm seed -- --contratos-propios` despliega en la red de prueba dos contratos solo para el evento de muestra (con el WASM del despliegue, por el mismo camino que usa el kit al publicar) y apunta las entradas a ellos, en vez de a los compartidos de `deploy/testnet.json`. Conviene en toda base que no sea la de desarrollo (la de quien evalúa, la de producción): así el "Verificar el registro del evento" del panel no trae credenciales emitidas desde otras bases contra el mismo contrato. Se despliegan una sola vez; con `--refresh --contratos-propios` se renuevan. Sin la opción, el seed sigue usando los compartidos.
 
-Si los contratos del despliegue no existen (la red de prueba se reinicia cada tanto, la próxima vez el 16 de diciembre de 2026), hay que volver a desplegarlos como dice [contracts/rumbo-pass/README.md](../contracts/rumbo-pass/README.md) y correr `pnpm seed -- --refresh` para que las entradas apunten a los nuevos.
+Si los contratos del despliegue no existen (la red de prueba se reinicia cada tanto, la próxima vez el 16 de diciembre de 2026), hay que volver a desplegarlos como dice [contracts/rumbo-pass/README.md](../contracts/rumbo-pass/README.md) y correr `pnpm seed -- --refresh` para que las entradas apunten a los nuevos. Con despliegue propio, cuando el código del contrato ya está subido de nuevo, `pnpm setup:dev` despliega los contratos de muestra que falten, y después va el mismo `pnpm seed -- --refresh`.
 
 En desarrollo conviene un solo servidor por carpeta: dos `next dev` sobre la misma `app/` se pisan la salida en `.next` y aparecen errores al azar.
 
@@ -303,6 +307,12 @@ node scripts/capturas-publicar.mjs --salida data/capturas-publicar   # publicar 
 node scripts/sanear-fechas.mjs [--borrar]   # las lecturas del espejo con una hora que no existe o de antes del 2000 (de antes de que el servidor la validara): las lista, y con --borrar las borra
 ```
 
+**Cuánto tarda cada una, y cuándo correrla.** Los tiempos son de un clon nuevo en una laptop; lo que usa la red de prueba cambia según cómo ande ese día.
+
+- Siempre, antes de pedir revisión: `pnpm typecheck` (menos de veinte segundos) y `pnpm test` (menos de un minuto, sin conexión).
+- Si tocaste la puerta, el escáner o un canje, además: `node scripts/smoke-contrato.mjs` (medio minuto: una inscripción, la entrada, el canje y los dos dobles rechazados), `node scripts/inscribir-prueba.mjs --pago` (unos veinte segundos) y `pnpm e2e -- --salida data/e2e.txt` (entre dos y siete minutos). El `e2e` levanta su propio servidor, así que va con `pnpm dev` cerrado en esa carpeta; con `--salida` la transcripción queda en `data/` y no reescribe `demo/e2e-testnet.txt`, que está versionado.
+- Si tocaste tablas, además: `pnpm test:pg`.
+
 `pnpm e2e` (`scripts/e2e-testnet.mjs`) levanta un servidor de desarrollo propio sobre una base nueva en `data/e2e`, crea el evento de muestra sobre los contratos de muestra (con `--contratos nuevos` despliega dos para la corrida, por si los de muestra se llenan), inscribe a una persona gratis y a otra con la entrada paga (y comprueba que la plata llegó a quien organiza y a Rumbo en la misma transacción), abre sus credenciales, las pasa por la puerta y por la mesa del almuerzo con la API del escáner, intenta el segundo canje y la segunda entrada, y comprueba con `status()`, `attendees()` e `info()` en la cadena y con el panel, el informe y el CSV que los números coinciden. Al final hace lo mismo con la cuenta propia: una llave local hace de billetera de Pollar, sin cuenta en la red, firma el desafío y la autorización de una inscripción gratis y de una entrada paga, y pasa por la puerta. Deja la transcripción con los ids de las transacciones en [demo/e2e-testnet.txt](demo/e2e-testnet.txt). Con `--base` usa un servidor ya levantado. Con `--motor postgres` la base es Postgres: levanta un Postgres local (`pnpm db:local`, PGlite servido por la red, que comparten el servidor, el seed y el script), lo migra con `pnpm db:migrate` y corre todo con `RUMBO_REPO=postgres` y el driver de producción. El contrato tiene sus propias pruebas: `cargo test --workspace` desde la raíz del repositorio.
 
 ## Cómo está armada
@@ -354,7 +364,7 @@ Todo lo que lee o escribe datos pasa por `src/server/base` (`getDb()`), con el m
 ### La red: `src/server/stellar.ts`
 
 - `getRpc()`, `getHorizon()`, `getSponsor()` (paga las comisiones de todo), `getGate()` (firma check-ins y canjes), `fundWithFriendbot(publicKey)`.
-- `readDeployInfo()` lee `contracts/rumbo-pass/deploy/testnet.json`: el activo de prueba, las cuentas y los contratos desplegados (`events.free`, `events.paid`). `getTestAsset()` da el USDC de prueba; `resolveContractId("free" | "paid")` el contrato de muestra.
+- `readDeployInfo()` lee el despliegue (`contracts/rumbo-pass/deploy/testnet.json`, o el archivo que diga `RUMBO_DEPLOY_JSON`: el propio que arma `pnpm setup:dev`, o la copia de producción): el activo de prueba, las cuentas y los contratos desplegados (`events.free`, `events.paid`). `getTestAsset()` da el USDC de prueba; `resolveContractId("free" | "paid")` el contrato de muestra.
 - `rumboPass`: `register(contractId, attendee, signer)`, `buy(contractId, buyer, signer)`, `checkIn(contractId, attendee)` (lo marca la puerta, y solo la puerta), `redeem(contractId, attendee, benefit)`, `extendTtl(contractId, holders)` (mantiene vivos el evento y los pases antes de un evento que abrió con meses de anticipación), `status(contractId, who)`, `attendees(contractId)` e `info(contractId)`. Las dos primeras las firma la persona (`AuthSigner`, de `accounts.authSigner(personId)` o `keypairSigner(keypair)`), la paga el servidor; las dos siguientes las firma la puerta.
 - Los errores del contrato llegan como `ContractError`, con `code` y `errorName` (`AlreadyCheckedIn`, `AlreadyRedeemed`, `NotCheckedIn`...). `isContractError(error, "AlreadyRedeemed")` y `isAlreadyDone(error)` son los que marcan "doble" en el espejo.
 - `submitSponsored(tx, signers)` es la pieza de abajo: simula, firma las autorizaciones, arma la transacción con la comisión de la simulación, la firma con la patrocinadora y espera el resultado. Mandar y esperar es `sendAndWait`, que trata lo que contesta el nodo como corresponde: `DUPLICATE` es "ya está en camino" (se sigue esperando el resultado por su hash, no es un error) y `TRY_AGAIN_LATER` es "ocupado, reintentá después" (se vuelve a mandar la misma transacción con espera de 1, 2, 4, 8 y 8 segundos y, si sigue ocupado, queda como un error sin código de contrato que el escáner deja pendiente, sin esperar a una transacción que nunca entró). Todo lo que manda la patrocinadora pasa por `withSponsorLock`, de a una, porque comparten el número de secuencia; con Postgres, además, entre instancias, con el turno `sponsor` de la base. El SDK de Stellar queda fuera del bundle del servidor (`serverExternalPackages` en `next.config.ts`): adentro se duplicaban los tipos XDR y firmar una autorización fallaba.
@@ -384,7 +394,7 @@ Solo con la sesión (o el código) del puesto Puerta (los demás reciben 403). `
 
 ## Las variables
 
-Están todas en [`.env.example`](.env.example), con lo que hace cada una. Las llaves secretas viven en `.env.local` y nunca se versionan. `RUMBO_EVENTS_PER_DAY` es cuántos eventos puede crear una cuenta de organizador en veinticuatro horas (tres si no se dice; en la red de prueba cada evento publicado despliega contratos). Las cuentas son las mismas que usa el despliegue del contrato ([contracts/rumbo-pass](../contracts/rumbo-pass/README.md)): `STELLAR_SPONSOR_SECRET`, `STELLAR_GATE_SECRET`, `STELLAR_ISSUER_SECRET`, `STELLAR_ORGANIZER_SECRET` y `STELLAR_TREASURY_SECRET`. `RUMBO_DATA_DIR` cambia la carpeta de la base y los correos (los scripts de prueba la usan para no mezclar datos). `RUMBO_LIST_ONLY_EVENTS` lleva, separados por coma, los eventos que entran solo por lista (el final de su `/e/<evento>`): no salen en el inicio, su página dice que la inscripción la lleva quien organiza, y el formulario, el de equipos y la API contestan que no (403 `list_only`), mientras importar la lista y agregar en la puerta siguen andando (`src/server/evento/por-lista.ts`); vacía, todo queda como siempre.
+Están todas en [`.env.example`](.env.example), con lo que hace cada una. Las llaves secretas viven en `.env.local` y nunca se versionan. `RUMBO_EVENTS_PER_DAY` es cuántos eventos puede crear una cuenta de organizador en veinticuatro horas (tres si no se dice; en la red de prueba cada evento publicado despliega contratos). Las cuentas son las mismas que usa el despliegue del contrato ([contracts/rumbo-pass](../contracts/rumbo-pass/README.md)): `STELLAR_SPONSOR_SECRET`, `STELLAR_GATE_SECRET`, `STELLAR_ISSUER_SECRET`, `STELLAR_ORGANIZER_SECRET` y `STELLAR_TREASURY_SECRET`. `RUMBO_DATA_DIR` cambia la carpeta de la base y los correos (los scripts de prueba la usan para no mezclar datos). `RUMBO_DEPLOY_JSON` dice qué despliegue usa la app: vacía, el de muestra; `pnpm setup:dev` la deja apuntando al despliegue propio cuando las llaves no son las de muestra (arriba, "Levantarla desde cero"). `RUMBO_LIST_ONLY_EVENTS` lleva, separados por coma, los eventos que entran solo por lista (el final de su `/e/<evento>`): no salen en el inicio, su página dice que la inscripción la lleva quien organiza, y el formulario, el de equipos y la API contestan que no (403 `list_only`), mientras importar la lista y agregar en la puerta siguen andando (`src/server/evento/por-lista.ts`); vacía, todo queda como siempre.
 
 ## En producción
 
@@ -420,6 +430,21 @@ Para probar el motor de producción en esta máquina, sin Supabase: `pnpm db:loc
 - **Un enlace de solo lectura por auspiciante.** Hoy el informe (`/admin/<evento>/informe`) lo abre quien organiza, con su clave, y quien auspicia lo recibe impreso o en PDF. Viene un enlace propio por auspiciante, sin la clave del panel, que muestre solo su informe.
 - **La cuenta de organizador no pasa un evento a otra cuenta.** Un evento es de la cuenta que lo creó; la dueña suma a quien coorganiza (Tu equipo) y, para quien no tiene cuenta, está "Compartir el panel", con la clave del evento. Tampoco se comprueba del lado del servidor que la cuenta sea de Pollar (la API de Pollar con `POLLAR_SECRET_KEY` lo permitiría): hoy cualquier llave que firme el desafío entra, y por eso los topes por IP. Y los eventos de antes (los de muestra, los del MCP) no tienen dueño: se abren con su clave. Pasar un evento a una cuenta queda para después.
 - **Pollar 0.12 antes del 30-nov-2026.** La API v1 que usa `@pollar/core` 0.11 se retira ese día; en 0.12 cada firma pide confirmación a la persona salvo que la política de la app diga otra cosa, así que la inscripción tiene que mostrar ese pedido (`onConfirmationRequest`). Y para mainnet, donde Pollar no custodia cuentas, la inscripción con Google pasa a billeteras cofirmadas o a passkeys.
+
+## Cómo aportar
+
+- Cada persona trabaja con las cuentas que crea su máquina (`pnpm setup:dev`). Nadie usa un `.env.local` copiado de otra.
+- Una rama por issue y un pull request contra `main`. Nada va directo a `main`.
+- La primera revisión de cada pull request la hace otra persona del equipo. Si necesitás tocar un archivo que lleva otra persona, avisá antes.
+- Sobre cada archivo grande (`Escaner.tsx`, `PanelCliente.tsx`) va un solo pull request abierto por persona, y se fusiona a diario.
+- En el pull request va qué cambia, cómo lo probaste (arriba, "Probarlo") y si deja vieja alguna frase de este README.
+- En la semana de un evento no entra ninguna migración de la base: así siempre se puede volver al despliegue anterior.
+- Commits en castellano, con una frase que cuente qué cambió.
+- Todo texto que ve la gente va en castellano y en inglés en el mismo pull request. Hay pruebas que frenan palabras técnicas en pantalla (`tests/textos.test.mjs` y `tests/kit-textos.test.mjs`): se dice credencial, canje, conexión y enlace.
+- Las pantallas nuevas van simples: primero importa que anden.
+- En el repositorio no van nombres de personas, correos reales (en las pruebas, el dominio `example.com`), archivos `.csv` ni llaves.
+- En los comentarios y en los pull requests tampoco van llaves, códigos de puesto, el enlace del panel con su clave ni enlaces de credenciales. Tampoco en una captura.
+- Si `git status` te muestra cambiados `app/demo/*.txt` o `contracts/rumbo-pass/deploy/testnet.json`, no los subas.
 
 ## Cómo se escribe lo visible
 
